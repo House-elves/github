@@ -1,55 +1,67 @@
-// The GitHub elf's tab on Elf Desk, and its dashboard card: for now only how many items are on the board, from
-// board/board.json (what the elf's refresh wrote). The desk's GitHub tab moves here next.
-import { LitElement, html, css, shared, cardStyles, elf } from '/elf-kit/1/kit.js';
+// The GitHub elf's tab on Elf Desk, and its dashboard card. The tab is the desk's GitHub board, moved here: the
+// board (gh-board.js), and one item's thread page as a place in the tab (thread/owner/repo/123, the desk's link
+// #github/thread/owner/repo/123; its old #thread/owner/repo/123 links arrive here the same). It runs in the desk's
+// sandboxed frame and reads the files the elf writes; every GitHub write waits for your click in the desk's bar.
+import { LitElement, html, elf } from '/elf-kit/1/kit.js';
+import { itemKeyFromRoute } from './shared.js';
+import { go, onGo } from './api.js';
 
-/** Every item on the board: the four lanes and the mvnpm lane. */
-function count(board) {
-    const lanes = (board?.lanes ?? []).reduce((n, l) => n + (l.items?.length ?? 0), 0);
-    return lanes + (board?.mvnpm?.rows?.length ?? 0);
-}
-
-class BoardTab extends LitElement {
+/** The tab: the board, or the thread page its route names. */
+class GhTab extends LitElement {
 
     static properties = {
-        _board: { state: true },
-        _error: { state: true },
+        _route: { state: true },
     };
 
-    static styles = [shared, cardStyles, css`
-        .say { font-size: 15px; }
-        .muted { color: var(--muted); font-size: 13.5px; }
-    `];
+    constructor() {
+        super();
+        this._route = elf.route();
+    }
 
     connectedCallback() {
         super.connectedCallback();
-        this._load();
-        this._off = elf.onChange(() => this._load());
+        this._off = onGo(route => {
+            if (route === this._route) return;
+            this._route = route;
+            // The frame is as tall as what it shows, so the desk's page scrolls: a new place starts at its top.
+            this.updateComplete.then(() => this.scrollIntoView({ block: 'start' }));
+        });
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
         this._off?.();
-    }
-
-    async _load() {
-        try {
-            this._board = await elf.readJson('board', 'board.json');
-            this._error = null;
-        } catch (e) {
-            this._error = e?.message ?? String(e);
-        }
-        elf.card?.({ attention: false });
+        super.disconnectedCallback();
     }
 
     render() {
-        if (this._error) return html`<p class="say error">${this._error}</p>`;
-        if (this._board === undefined) return html`<p class="muted">Reading the board…</p>`;
-        if (!this._board) return html`<p class="say">No board yet. Refresh it to fetch GitHub.</p>`;
-        const n = count(this._board);
-        return html`<p class="say">${n} ${n === 1 ? 'item' : 'items'} on your board.</p>
-            <p class="muted">Fetched ${new Date(this._board.fetchedAt).toLocaleString()}.</p>`;
+        const key = itemKeyFromRoute(this._route);
+        return key ? html`<gh-thread .itemKey=${key}></gh-thread>` : html`<gh-board></gh-board>`;
     }
 }
 
-customElements.define('github-board', BoardTab);
-document.body.append(document.createElement('github-board'));
+/**
+ * Links in the tab to a thread page (#thread/owner/repo/123) or back to the board (#github) go there in the tab,
+ * as the desk's hash links did. Caught before the kit's own handler, which opens the tab for any other # link.
+ */
+function followLinks(e) {
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    const a = e.composedPath().find(n => n instanceof HTMLAnchorElement);
+    const href = a?.getAttribute('href') ?? '';
+    if (href === '#github' || href === '#') {
+        e.preventDefault();
+        go('');
+    } else if (itemKeyFromRoute(href.slice(1)) && href.startsWith('#')) {
+        e.preventDefault();
+        go(href.slice(1));
+    }
+}
+
+if (elf.view === 'card') {
+    await import('./gh-card.js');
+    document.body.append(document.createElement('gh-card'));
+} else {
+    await import('./gh-board.js');
+    customElements.define('gh-tab', GhTab);
+    window.addEventListener('click', followLinks, true);
+    document.body.append(document.createElement('gh-tab'));
+}
