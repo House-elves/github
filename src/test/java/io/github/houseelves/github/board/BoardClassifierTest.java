@@ -117,10 +117,14 @@ class BoardClassifierTest {
     }
 
     @Test
-    void aDependabotMvnpmBumpIsAPrLikeAnyOther() throws Exception {
+    void aDependabotMvnpmBumpIsLeftToTheMvnpmTab() throws Exception {
         Item bump = pr("quarkusio/quarkus", 50124, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
                 "dependabot/maven/org.mvnpm-lit-3.3.3", "xyz");
-        Board b = classify(List.of(bump), List.of(bump), QUARKUS_AND_SMALLRYE);
-        assertEquals(List.of("quarkusio/quarkus#50124"), lane(b, BoardClassifier.REVIEW));
+        Item other = pr("quarkusio/quarkus", 50125, "dependabot", "Bump io.smallrye:jandex from 3.2.0 to 3.2.1",
+                "dependabot/maven/io.smallrye-jandex-3.2.1", "abc");
+        Board b = classify(List.of(bump, other), List.of(bump, other), QUARKUS_AND_SMALLRYE);
+        assertEquals(List.of("quarkusio/quarkus#50125"), lane(b, BoardClassifier.REVIEW));
+        assertTrue(b.hidden().isEmpty());
+        assertTrue(b.ignored().isEmpty());
     }
 }

@@ -126,11 +126,11 @@ class BoardServiceTest {
     }
 
     @Test
-    void aDependabotMvnpmBumpIsAPrLikeAnyOtherWithNoSearchOfItsOwn() {
+    void aDependabotMvnpmBumpIsLeftToTheMvnpmTabWithNoSearchOfItsOwn() {
         involvedReturns(Items.pr("quarkusio/quarkus", 9, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
                 "dependabot/maven/org.mvnpm-lit-3.3.3", "abc"));
         Board b = service.board("me", "t", false);
-        assertEquals(List.of("quarkusio/quarkus#9"), keys(b));
+        assertEquals(List.of(), keys(b));
         verify(github, never()).search(anyString(), contains("author:app/dependabot"), anyInt());
     }
 

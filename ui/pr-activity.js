@@ -122,7 +122,7 @@ class PrActivity extends LitElement {
                         ${commits ? html`<button class="sm primary" ?disabled=${this._busy} @click=${this._review}>
                             ${this._busy === 'review' ? spinner : ''}Review the changes</button>` : ''}
                         <a class="btn sm" href="https://github.com/${this.itemKey.replace('#', '/pull/')}" target="_blank" rel="noopener">Open on GitHub</a>
-                        <button class="sm quiet" @click=${this._toggle}>Close</button>
+                        <button class="sm quiet" @click=${this._toggle}>Hide</button>
                     </div>
                     ${commits ? html`<p class="note">Review the changes: the agent looks at the PR as it is now, in its thread, and you
                         decide what to post.</p>` : ''}

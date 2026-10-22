@@ -375,4 +375,20 @@ class GitHubTest {
         assertEquals("", GitHub.summary(""));
         assertEquals("", GitHub.summary("<!-- nothing -->\n## Checklist\n- [ ] done"));
     }
+
+    @Test
+    void aCommentsGistIsPlainText() {
+        assertEquals("Status for workflow Quarkus CI: Failing Jobs", GitHub.snippet("""
+                # Status for workflow `Quarkus CI`
+
+                This is the status report for running `Quarkus CI` on commit [a7a5c81](https://x/y).
+
+                ## Failing Jobs
+
+                | Status | Name |
+                |---|---|
+                | ✖ | JVM Tests |
+                """));
+        assertEquals("Looks good, see the docs", GitHub.snippet("<!-- hi -->Looks **good**,\nsee [the docs](https://x)"));
+    }
 }

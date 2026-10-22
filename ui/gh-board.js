@@ -766,7 +766,7 @@ class GhBoard extends LitElement {
             case 'open': {
                 const open = this._open === item.key && this._panel === 'thread';
                 return html`<button class=${cls} aria-expanded=${open ? 'true' : 'false'} @click=${() => this._toggle(item.key)}>
-                    ${open ? 'Close' : n.label}</button>`;
+                    ${open ? 'Hide' : n.label}</button>`;
             }
             case 'go':
                 return html`<a class="btn ${cls}" href=${threadHref(n.target)}>${n.label}</a>`;
@@ -829,7 +829,7 @@ class GhBoard extends LitElement {
     _panelButton(item, panel, label, cls) {
         const open = this._open === item.key && this._panel === panel;
         return html`<button class=${cls} aria-expanded=${open ? 'true' : 'false'} @click=${() => this._toggle(item.key, panel)}>
-            ${open ? 'Close' : label}</button>`;
+            ${open ? 'Hide' : label}</button>`;
     }
 
     /** Two clicks to close: the button, then the inline confirmation. */

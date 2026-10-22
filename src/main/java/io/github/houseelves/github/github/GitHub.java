@@ -1009,9 +1009,28 @@ public class GitHub {
         return state + (inline > 0 ? " (" + inline + " inline)" : "") + (body.isEmpty() ? "" : ": " + body);
     }
 
-    private static String snippet(String body) {
-        String s = body.replaceAll("<!--.*?-->", "").replaceAll("\\s+", " ").strip();
+    /**
+     * A comment's gist as plain text, without the markdown. When it starts with a heading (a bot's report, say:
+     * "# Status for workflow `Quarkus CI`" then "## Failing Jobs"), the heading and the next one.
+     */
+    static String snippet(String body) {
+        String text = body.replaceAll("(?s)<!--.*?-->", "").replaceAll("(?s)```.*?(```|$)", "");
+        List<String> lines = text.lines().map(String::strip).filter(l -> !l.isEmpty() && !l.startsWith("|")).toList();
+        if (lines.isEmpty()) return "";
+        String s;
+        if (lines.get(0).startsWith("#")) {
+            s = plain(lines.get(0)) + lines.stream().skip(1).filter(l -> l.startsWith("#")).findFirst()
+                    .map(h -> ": " + plain(h)).orElse("");
+        } else {
+            s = String.join(" ", lines.stream().map(GitHub::plain).toList());
+        }
         return s.length() <= 200 ? s : s.substring(0, 200) + "…";
+    }
+
+    /** One line of markdown as text: no heading marks, quotes, emphasis, code ticks, or link targets. */
+    private static String plain(String line) {
+        return line.replaceFirst("^#+\\s*", "").replaceFirst("^>\\s*", "")
+                .replaceAll("!?\\[([^\\]]*)]\\([^)]*\\)", "$1").replaceAll("[`*_]", "").replaceAll("\\s+", " ").strip();
     }
 
     /**

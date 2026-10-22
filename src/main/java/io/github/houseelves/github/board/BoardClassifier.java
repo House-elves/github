@@ -16,6 +16,7 @@ import io.github.houseelves.github.scope.Scope;
  * Sorts fetched items into the board's lanes. Pure: no I/O, so the rules are
  * easy to test. Order of precedence, first match wins:
  * <ol>
+ * <li>Dependabot's org.mvnpm bumps are left out: the mvnpm tab (the mvnpm-dependabot elf) handles them;</li>
  * <li>anything you chose to ignore goes to the ignored list;</li>
  * <li>anything outside the scope is hidden, review requests included;</li>
  * <li>your own PRs; then PRs you were asked to review or have reviewed (they stay until merged or closed, even
@@ -34,6 +35,14 @@ public final class BoardClassifier {
             Comparator.nullsLast(Comparator.reverseOrder()));
 
     private BoardClassifier() {
+    }
+
+    /** A Dependabot PR bumping an org.mvnpm dependency: the mvnpm tab's, not the board's. */
+    static boolean mvnpmBump(Item item) {
+        String author = item.author() == null ? "" : item.author().toLowerCase(java.util.Locale.ROOT);
+        return item.isPr() && author.matches("(app/)?dependabot(\\[bot])?")
+                && ((item.title() != null && item.title().contains("org.mvnpm:"))
+                        || (item.headRef() != null && item.headRef().contains("org.mvnpm-")));
     }
 
     /** What was fetched from GitHub, before any classification. */
@@ -62,7 +71,9 @@ public final class BoardClassifier {
         List<Item> hidden = new ArrayList<>();
 
         for (Item item : all.values()) {
-            if (ignoredKeys.contains(item.key())) {
+            if (mvnpmBump(item)) {
+                continue;
+            } else if (ignoredKeys.contains(item.key())) {
                 ignored.add(item);
             } else if (!scope.covers(item.repo())) {
                 hidden.add(item);
