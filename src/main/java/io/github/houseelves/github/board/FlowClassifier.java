@@ -82,7 +82,9 @@ public final class FlowClassifier {
             case BoardClassifier.MINE -> "mine";
             case BoardClassifier.REVIEW -> "review";
             case BoardClassifier.ASSIGNED -> i.isPr() ? "review" : "issue";
-            default -> "involved";
+            // Just involved, until you start something on it with the agent: then it's yours, an issue to fix or a
+            // PR to review, and stays in its flow after the agent's done.
+            default -> c.thread() == null ? "involved" : i.isPr() ? "review" : "issue";
         };
         Flow base = switch (role) {
             case "mine" -> mine(i, c);

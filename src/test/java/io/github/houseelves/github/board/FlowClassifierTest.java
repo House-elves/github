@@ -180,6 +180,17 @@ class FlowClassifierTest {
     }
 
     @Test
+    void anItemYouStartedOnFromJustInvolvedStaysYours() {
+        Item issue = io.github.houseelves.github.Items.issue("quarkusio/quarkus", 7, "someone");
+        is(FlowClassifier.flow(BoardClassifier.INVOLVED, issue, ctx()), Flow.WATCHING, 0, null);
+        // You asked the agent to investigate, it answered, and you read it: Fix it is next, in Your move.
+        ThreadView.Summary read = new ThreadView.Summary("k", "idle", "investigate", null, NOW, false, null, null);
+        Flow f = FlowClassifier.flow(BoardClassifier.INVOLVED, issue, new FlowClassifier.Ctx(ME, read, null, null, null, List.of(), NOW));
+        is(f, Flow.YOU, 1, "fix");
+        assertEquals("issue", f.role());
+    }
+
+    @Test
     void aReviewYouPostedFromHereCountsBeforeTheNextFetch() {
         // quarkusio/quarkus-agent-mcp#299: you asked for changes at 19:07; the board's last fetch was at 19:00.
         Item pr = pr2("someone", "PENDING", "UNSTABLE", "MERGEABLE", false, false, "CHANGES_REQUESTED");
@@ -283,7 +294,8 @@ class FlowClassifierTest {
     @Test
     void involvedItemsAreJustWatched() {
         is(FlowClassifier.flow("involved", issue("quarkusio/quarkus", 5, "someone"), ctx()), Flow.WATCHING, 0, null);
+        // Once you asked the agent something, it's yours: the issue's flow, with its answer to read first.
         is(FlowClassifier.flow("involved", issue("quarkusio/quarkus", 5, "someone"),
-                ctx(thread("answered", "ask", null), null, null, null, List.of())), Flow.YOU, 0, "open");
+                ctx(thread("answered", "ask", null), null, null, null, List.of())), Flow.YOU, 1, "open");
     }
 }
