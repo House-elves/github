@@ -180,6 +180,18 @@ class FlowClassifierTest {
     }
 
     @Test
+    void aReviewYouPostedFromHereCountsBeforeTheNextFetch() {
+        // quarkusio/quarkus-agent-mcp#299: you asked for changes at 19:07; the board's last fetch was at 19:00.
+        Item pr = pr2("someone", "PENDING", "UNSTABLE", "MERGEABLE", false, false, "CHANGES_REQUESTED");
+        Instant posted = NOW.minusSeconds(600);
+        ThreadView.Summary t = new ThreadView.Summary("k", "idle", "review", null, NOW, false, "review", posted);
+        Flow f = FlowClassifier.flow("review", pr, new FlowClassifier.Ctx(ME, t, null, null, null, List.of(), NOW));
+        is(f, Flow.OTHERS, 1, null);
+        assertEquals(posted, f.since());
+        org.junit.jupiter.api.Assertions.assertTrue(f.say().startsWith("Reviewed. Waiting on the author"), f.say());
+    }
+
+    @Test
     void youPushedSinceTheReviewSoAskThemAgain() {
         Item pushed = pr2(ME, "SUCCESS", "BLOCKED", "MERGEABLE", false, false, "CHANGES_REQUESTED");
         Instant at = NOW.minusSeconds(7200);

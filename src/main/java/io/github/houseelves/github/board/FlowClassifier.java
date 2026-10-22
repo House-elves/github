@@ -271,7 +271,14 @@ public final class FlowClassifier {
     /** Someone else's PR: review it, wait for the author, then CI and merge. */
     static Flow review(Item i, Ctx c) {
         String last = c.thread() == null ? null : c.thread().action();
-        boolean reviewed = c.reviewedAt() != null;
+        // A review you posted from here counts at once, before GitHub's next fetch says so.
+        Instant reviewedAt = c.reviewedAt();
+        ThreadView.Summary t = c.thread();
+        if (t != null && "review".equals(t.postedKind()) && t.postedAt() != null
+                && (reviewedAt == null || t.postedAt().isAfter(reviewedAt))) {
+            reviewedAt = t.postedAt();
+        }
+        boolean reviewed = reviewedAt != null;
         if (reviewed && c.sinceReview() != null) {
             boolean commits = c.sinceReview().startsWith("New commits");
             return flow("review", REVIEW_STEPS, 0, Flow.YOU, i.updatedAt(), c.sinceReview() + ".",
@@ -286,7 +293,7 @@ public final class FlowClassifier {
                     new Flow.Next("review", "Review"), more);
         }
         if (!Boolean.TRUE.equals(i.approved())) {
-            return flow("review", REVIEW_STEPS, 1, Flow.OTHERS, c.reviewedAt() != null ? c.reviewedAt() : i.updatedAt(),
+            return flow("review", REVIEW_STEPS, 1, Flow.OTHERS, reviewedAt != null ? reviewedAt : i.updatedAt(),
                     "Reviewed. Waiting on the author" + waited(i, c) + ".", null,
                     List.of(new Flow.Next("whats-new", "What's new"), new Flow.Next("review", "Review again")));
         }
