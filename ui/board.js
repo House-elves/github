@@ -1,4 +1,4 @@
-// The GitHub elf's tab on Elf Desk, and its dashboard card. The tab is the desk's GitHub board, moved here: the
+// The GitHub elf's tab on Elf Desk, its dashboard card, and its settings (in the desk's Settings pop-up). The tab is the desk's GitHub board, moved here: the
 // board (gh-board.js), and one item's thread page as a place in the tab (thread/owner/repo/123, the desk's link
 // #github/thread/owner/repo/123; its old #thread/owner/repo/123 links arrive here the same). It runs in the desk's
 // sandboxed frame and reads the files the elf writes; every GitHub write waits for your click in the desk's bar.
@@ -59,6 +59,14 @@ function followLinks(e) {
 if (elf.view === 'card') {
     await import('./gh-card.js');
     document.body.append(document.createElement('gh-card'));
+} else if (elf.view === 'settings') {
+    // What the board watches, at the top of the desk's Settings pop-up for this elf.
+    await import('./gh-settings.js');
+    const settings = document.createElement('gh-settings');
+    settings.embedded = true;
+    // The repos you maintain are part of the board's search: it fetches again.
+    settings.addEventListener('board-search-changed', () => elf.run('refresh').catch(() => {}));
+    document.body.append(settings);
 } else {
     await import('./gh-board.js');
     customElements.define('gh-tab', GhTab);

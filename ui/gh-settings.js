@@ -70,12 +70,18 @@ class GhSettings extends LitElement {
         try {
             // What the elf's last run wrote; before its first run, the elf says.
             this._settings = (await settingsView()) ?? await act('settings');
+        } catch (e) {
+            this._error = `Couldn't load settings: ${errorMessage(e)}`;
+            return;
+        }
+        try {
+            // Orgs you might watch, from GitHub: without them the settings still work.
             this._suggestions = await act('suggestions');
             if (this._firstRun()) {
                 this._picked = new Set(this._suggestions.filter(s => s.preselect).map(s => s.owner));
             }
-        } catch (e) {
-            this._error = `Couldn't load settings: ${errorMessage(e)}`;
+        } catch {
+            this._suggestions = [];
         }
     }
 
@@ -89,7 +95,7 @@ class GhSettings extends LitElement {
         this._error = null;
         try {
             this._settings = await call();
-            this._suggestions = await act('suggestions');
+            this._suggestions = await act('suggestions').catch(() => this._suggestions);
             return true;
         } catch (e) {
             this._error = errorMessage(e);

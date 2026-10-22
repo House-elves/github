@@ -13,7 +13,6 @@ import './conflict-menu.js';
 import './pr-activity.js';
 import './pr-review.js';
 import './gh-thread.js';
-import './gh-settings.js';
 
 const DATE = new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -87,6 +86,14 @@ const CALLS = {
 const PANEL_STEPS = new Set(['self-fix', 'ci-fix', 'ci-why', 'ci-rerun', 'ci-reopen', 'conflicts', 'address', 'fix', 'investigate', 'review']);
 
 /**
+ * Its settings, in the desk's Settings pop-up: what the board watches (gh-settings.js, this elf's settings view),
+ * then the account it works as, when it refreshes, its version and updates, and removing it.
+ */
+function openSettings() {
+    elf.settings(null, 'GitHub settings');
+}
+
+/**
  * The GitHub board, by whose move it is. Every item is in a flow (your PR, a PR to review, an assigned issue); the
  * desk works out its stage and next step (FlowClassifier), and the row shows that with one main
  * button. A row opens in place to read what the agent made and send it, so you rarely leave the board.
@@ -96,7 +103,6 @@ class GhBoard extends LitElement {
 
     static properties = {
         /** The board's settings are open (what to watch, the runner). */
-        settingsOpen: { type: Boolean },
         _board: { state: true },
         _loading: { state: true },
         /** The elf's runs (elf.state()): a refresh running, or the end of a failed one's log. */
@@ -121,15 +127,6 @@ class GhBoard extends LitElement {
     static styles = [shared, css`
         .hero { display: grid; gap: 10px; max-width: 46rem; }
         .board-top { margin-bottom: 34px; }
-        /* A pop-up at the top of the tab (where its Settings button is): the frame is as tall as the board, so a
-           dialog centred in it could be far below. */
-        .settings-dialog { position: absolute; top: 16px; margin: 0 auto; width: min(52rem, calc(100% - 32px));
-            max-height: none; padding: 22px 24px 26px; border: 1px solid var(--line); border-radius: var(--r-panel);
-            background: var(--bg); color: var(--ink); box-shadow: var(--shadow); }
-        .settings-dialog::backdrop { background: color-mix(in srgb, var(--ink) 35%, transparent); }
-        .settings-dialog[open] { display: grid; gap: 22px; }
-        .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-        .dialog-head h2 { font-size: 22px; font-weight: 600; margin: 0; }
         .date { color: var(--muted); font-size: 15px; }
         .hero h1 { font-size: 34px; line-height: 1.18; font-weight: 600; letter-spacing: -0.022em; text-wrap: balance; }
         .hero h1 button {
@@ -243,8 +240,6 @@ class GhBoard extends LitElement {
         .empty { color: var(--muted); padding: 16px 18px; margin: 0; font-size: 14px; }
 
         .notice { padding: 18px 20px; margin-bottom: 26px; display: grid; gap: 8px; max-width: 46rem; }
-        .elf-settings { display: grid; gap: 10px; }
-        .general { padding: 14px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
         .notice p { margin: 0; }
 
         details summary {
@@ -602,19 +597,12 @@ class GhBoard extends LitElement {
                         ${this._refreshing ? spinner : ''}${this._refreshing ? 'Refreshing' : 'Refresh'}</button>
                     ${this._failed() ? html`<span class="chip bad" title=${this._failed()}>The last refresh failed</span>` : ''}
                 </div>
-            </div>${settingsToggle(this.settingsOpen, () => { this.settingsOpen = !this.settingsOpen; })}</div>
-            <dialog class="settings-dialog" aria-label="GitHub settings" @close=${() => { this.settingsOpen = false; }}>
-                ${this.settingsOpen ? html`
-                    <div class="dialog-head"><h2>Settings</h2>
-                        <button class="sm" @click=${() => this.renderRoot.querySelector('.settings-dialog').close()}>Done</button></div>
-                    <gh-settings embedded @board-search-changed=${() => this._load(true)}></gh-settings>
-                    ${this._renderElfSettings(b)}` : ''}
-            </dialog>
+            </div>${settingsToggle(false, () => openSettings())}</div>
 
             ${b.scopeEmpty ? html`
                 <div class="panel notice">
                     <p>The board shows open PRs and issues from the orgs and repos you choose.</p>
-                    <p><button class="primary" @click=${() => { this.settingsOpen = true; }}>Choose what to watch</button></p>
+                    <p><button class="primary" @click=${() => openSettings()}>Choose what to watch</button></p>
                 </div>` : ''}
             ${b.truncated ? html`
                 <div class="panel notice"><p>GitHub returned its limit of 1000 results, so some older items are missing.</p></div>` : ''}
@@ -641,42 +629,6 @@ class GhBoard extends LitElement {
                 </div>
             </div>
         `;
-    }
-
-    /**
-     * The elf itself: the GitHub account it works as, and its own settings in the desk's dialog (its version, an
-     * update, when it refreshes on its own, removing it), so secrets never reach the tab. The runner's settings are at
-     * the bottom of the desk's + page.
-     */
-    updated(changed) {
-        super.updated?.(changed);
-        if (!changed.has('settingsOpen')) return;
-        const d = this.renderRoot.querySelector('.settings-dialog');
-        if (!d) return;
-        if (this.settingsOpen && !d.open) {
-            d.showModal();
-            // The frame is as tall as the page under it: keep room for the whole dialog while it's open.
-            requestAnimationFrame(() => { document.body.style.minHeight = `${d.scrollHeight + 48}px`; });
-        } else if (!this.settingsOpen && d.open) {
-            d.close();
-        }
-        if (!this.settingsOpen) document.body.style.minHeight = '';
-    }
-
-    _renderElfSettings(b) {
-        return html`<section class="elf-settings" aria-labelledby="account">
-            <div class="sec-head"><h2 id="account">This elf</h2></div>
-            <div class="panel general">
-                <span>The board works as <b>${b.login}</b>, with that gh account's token.</span>
-                <button class="sm" @click=${() => { this.settingsOpen = false; elf.settings(['GITHUB_ACCOUNT'], 'GitHub account'); }}>Change</button>
-            </div>
-            <div class="panel general">
-                <span>Its version and updates, when it refreshes on its own, and removing it.</span>
-                <button class="sm" @click=${() => { this.settingsOpen = false; elf.settings(null, 'GitHub settings'); }}>Version and updates</button>
-            </div>
-            <p class="small muted" style="margin:0">How
-                the agents run (the runner's settings) is at the bottom of the + page.</p>
-        </section>`;
     }
 
     _renderSection(s, rows) {
