@@ -299,7 +299,7 @@ public final class Prompts {
 
     /** The tags that mark quoted GitHub text in prompts. */
     private static final java.util.regex.Pattern DELIMITER = java.util.regex.Pattern.compile(
-            "<(/?)(description|comment|thread|review|code|log)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "<(/?)(description|comment|thread|review|code|log|prs)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * Text from GitHub for inside one of the prompt's tags: any of those tags in it are defused ({@code </comment>}

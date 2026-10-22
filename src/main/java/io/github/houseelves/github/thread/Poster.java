@@ -137,6 +137,18 @@ public class Poster {
         }
     }
 
+    /**
+     * What the desk's confirm bar said you're posting ({@code kind} on {@code itemKey}, from the tab), checked
+     * against the draft: the bar can't name one thing while another is posted. Null: the bar didn't say.
+     */
+    public void checkWords(long draftId, String kind, String itemKey) {
+        Draft d = pendingDraft(draftId);
+        if (kind != null && !kind.equals(d.kind)) throw new IllegalStateException("That draft is a " + d.kind + ", not a " + kind);
+        if (itemKey != null && !itemKey.equals(store.thread(d.threadId).itemKey)) {
+            throw new IllegalStateException("That draft isn't on " + itemKey);
+        }
+    }
+
     public Result post(long draftId, String confirm, String login) {
         return post(draftId, confirm, login, true);
     }

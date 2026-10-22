@@ -158,8 +158,10 @@ public class CiService {
         if (!failing(ci)) throw new NotFailing(ci.ci());
         ThreadView existing = again ? null : threads.existing(itemKey, Prompts.CI_WHY, ci.headSha());
         if (existing != null) return existing;
-        return threads.start(itemKey, Prompts.CI_WHY, null, login, token, failures(itemKey, ci, token),
-                mapper.createObjectNode().put("head", ci.headSha()));
+        // Check names, URLs and log tails come from the PR's CI: the safety check reads them too.
+        String failures = failures(itemKey, ci, token);
+        return threads.start(itemKey, Prompts.CI_WHY, null, login, token, failures,
+                mapper.createObjectNode().put("head", ci.headSha()), failures);
     }
 
     public ThreadView why(String itemKey, String login, String token) {
@@ -193,7 +195,8 @@ public class CiService {
         if (existing != null) return existing;
         ObjectNode extras = mapper.createObjectNode().put("head", ci.headSha());
         extras.putObject("push").put("headRepo", ci.headRepo()).put("headRef", ci.headRef()).put("headSha", ci.headSha());
-        return threads.start(itemKey, Prompts.CI_FIX, null, login, token, failures(itemKey, ci, token), extras);
+        String failures = failures(itemKey, ci, token);
+        return threads.start(itemKey, Prompts.CI_FIX, null, login, token, failures, extras, failures);
     }
 
     /**
@@ -256,18 +259,23 @@ public class CiService {
                 .append("\n\n");
         if (ci.failed().isEmpty()) sb.append("GitHub reports no failed checks right now (CI: ").append(ci.ci()).append(").\n");
         for (GitHub.FailedCheck f : ci.failed()) {
-            sb.append("- ").append(f.name()).append(": ").append(f.conclusion());
-            if (f.url() != null) sb.append(" (").append(f.url()).append(')');
+            sb.append("- ").append(Prompts.quote(f.name())).append(": ").append(f.conclusion());
+            if (f.url() != null) sb.append(" (").append(Prompts.quote(f.url())).append(')');
             sb.append('\n');
         }
         List<GitHub.FailedCheck> withLogs = ci.failed().stream().filter(f -> f.jobId() != null).limit(MAX_LOGS).toList();
         for (GitHub.FailedCheck f : withLogs) {
             String log = github.jobLogTail(token, repo(itemKey), f.jobId(), LOG_TAIL_CHARS);
             if (log == null) continue;
-            sb.append("\n<log job=\"").append(f.name()).append("\" note=\"last ").append(LOG_TAIL_CHARS)
+            sb.append("\n<log job=\"").append(attribute(f.name())).append("\" note=\"last ").append(LOG_TAIL_CHARS)
                     .append(" characters\">\n").append(Prompts.quote(log)).append("\n</log>\n");
         }
         return sb.toString();
+    }
+
+    /** Text for inside a tag's attribute: its tags defused, and no quote to end the attribute early. */
+    static String attribute(String s) {
+        return Prompts.quote(s).replace("\"", "'");
     }
 
     static String repo(String itemKey) {

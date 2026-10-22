@@ -158,6 +158,12 @@ public class BoardApi {
         return poster.post(draftId, confirm, login, asDraft == null || asDraft);
     }
 
+    /** As above, with what the confirm bar named ({kind} on {itemKey}), which must be the draft's. */
+    public Poster.Result post(long draftId, String confirm, Boolean asDraft, String kind, String itemKey) {
+        poster.checkWords(draftId, kind, itemKey);
+        return post(draftId, confirm, asDraft);
+    }
+
     /** The runner pushed (status 200) or didn't: finishes the post that handed it the push. */
     public Poster.Posted postDone(long draftId, int status, String error) {
         Poster.Posted posted = poster.postDone(draftId, status, error, login);
