@@ -64,7 +64,7 @@ export function matches(item, role, filter) {
 
 /**
  * Steps run straight from a row, as the elf's actions: agent steps leave the row showing the agent working; the CI,
- * rebase, ready and assign steps write to GitHub, so they wait for your click in the desk's bar.
+ * rebase, ready, assign and re-request steps write to GitHub, so they wait for your click in the desk's bar.
  */
 const CALLS = {
     review: key => startAgent('start', { itemKey: key, action: 'review' }),
@@ -81,6 +81,7 @@ const CALLS = {
     address: key => startAgent('address-review', { itemKey: key }),
     'self-fix': key => startAgent('fix-review', { itemKey: key }),
     assign: key => act('assign-me', { itemKey: key }),
+    're-request': (key, next) => act('re-request-review', { itemKey: key, reviewers: next.target }),
 };
 
 /** Steps that start the agent or CI, which an open row's panel offers next to the agent's answer. */
@@ -394,7 +395,7 @@ class GhBoard extends LitElement {
         this._error = null;
         this._rowError = null;
         try {
-            const r = await call(item.key);
+            const r = await call(item.key, next);
             if (next.id === 'ready' && r) rememberItem(r);
             this._moreFor = null;
             await this._reloadNow();

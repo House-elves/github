@@ -351,6 +351,31 @@ public class Poster {
         live.changed(itemKey);
     }
 
+    /** Asks these people to review your PR again, as you; kept in the log of GitHub writes. */
+    public void requestReviewers(String itemKey, List<String> logins, String login) {
+        if (!itemKey.matches("[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\\d+")) {
+            throw new IllegalArgumentException("Not a PR: " + itemKey);
+        }
+        String repo = itemKey.substring(0, itemKey.indexOf('#'));
+        int number = Integer.parseInt(itemKey.substring(itemKey.indexOf('#') + 1));
+        JsonNode response;
+        try {
+            response = writes.requestReviewers(repo, number, logins);
+        } catch (GitHubWriter.WriteFailed e) {
+            throw new IllegalStateException("GitHub refused it: " + githubMessage(e));
+        }
+        DeskThread t = store.byKey(itemKey);
+        GitHubAction a = new GitHubAction();
+        a.threadId = t == null ? null : t.id;
+        a.kind = "request-review";
+        a.request = mapper.createObjectNode().put("item", itemKey).set("reviewers", mapper.valueToTree(logins)).toString();
+        a.resultUrl = response.path("html_url").asText(null);
+        a.login = login;
+        store.audit(a);
+        if (t != null) store.addTurn(t.id, Turn.SYSTEM, null, "You asked " + String.join(", ", logins) + " to review again.");
+        live.changed(itemKey);
+    }
+
     /**
      * A review's inline comments must sit on lines of the PR's diff as it is now, or GitHub refuses the whole review
      * ("Path could not be resolved"). The PR can change after the agent drafted it, a file taken out or lines moved,

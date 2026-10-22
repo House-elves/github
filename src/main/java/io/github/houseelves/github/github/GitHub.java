@@ -643,7 +643,30 @@ public class GitHub {
      * @param afterYou    it came after your last commit, comment and review: your move
      * @param openThreads review threads not resolved yet
      */
-    public record Feedback(String who, Instant at, String state, boolean afterYou, int openThreads) {
+    /**
+     * @param reReview  reviewers whose latest review (changes asked for, or comments) came before your latest commit,
+     *                  and who aren't asked to review again yet: who to ask
+     * @param requested who's asked to review now
+     */
+    public record Feedback(String who, Instant at, String state, boolean afterYou, int openThreads, List<String> reReview,
+            List<String> requested) {
+
+        public Feedback(String who, Instant at, String state, boolean afterYou, int openThreads) {
+            this(who, at, state, afterYou, openThreads, List.of(), List.of());
+        }
+
+        public Feedback {
+            reReview = reReview == null ? List.of() : List.copyOf(reReview);
+            requested = requested == null ? List.of() : List.copyOf(requested);
+        }
+
+        /** You asked them to review again. */
+        public Feedback asked(List<String> logins) {
+            List<String> now = new ArrayList<>(requested);
+            logins.stream().filter(l -> now.stream().noneMatch(l::equalsIgnoreCase)).forEach(now::add);
+            return new Feedback(who, at, state, afterYou, openThreads,
+                    reReview.stream().filter(r -> logins.stream().noneMatch(r::equalsIgnoreCase)).toList(), now);
+        }
     }
 
     public static final int DETAILS_PER_QUERY = 25;
@@ -746,7 +769,8 @@ public class GitHub {
     private static final String FEEDBACK = "lastCommit: commits(last: 1) { nodes { commit { committedDate } } } "
             + "allReviews: reviews(last: 30) { nodes { state submittedAt author { __typename login } } } "
             + "comments(last: 30) { nodes { createdAt author { __typename login } } } "
-            + "reviewThreads(last: 100) { nodes { isResolved } } ";
+            + "reviewThreads(last: 100) { nodes { isResolved } } "
+            + "reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } } } } ";
 
     /** Who spoke last on your PR, and whether that came after you did. Null when nobody did and nothing is open. */
     static Feedback feedback(JsonNode pr, String login) {
@@ -772,8 +796,29 @@ public class GitHub {
         }
         int open = 0;
         for (JsonNode t : pr.path("reviewThreads").path("nodes")) if (!t.path("isResolved").asBoolean()) open++;
-        if (who == null && open == 0) return null;
-        return new Feedback(who, at, state, at != null && (mine == null || at.isAfter(mine)), open);
+        // Who asked for changes or commented in a review before your latest commit, and isn't asked again yet.
+        Instant committed = instant(pr.path("lastCommit").path("nodes").path(0).path("commit").path("committedDate"));
+        List<String> requested = new ArrayList<>();
+        pr.path("reviewRequests").path("nodes").forEach(r -> {
+            String l = r.path("requestedReviewer").path("login").asText("");
+            if (!l.isEmpty()) requested.add(l);
+        });
+        Map<String, JsonNode> latest = new java.util.LinkedHashMap<>();
+        for (JsonNode n : pr.path("allReviews").path("nodes")) {
+            String by = n.path("author").path("login").asText("");
+            if (by.equalsIgnoreCase(login) || isBot(n.path("author")) || "PENDING".equals(n.path("state").asText())) continue;
+            JsonNode before = latest.get(by);
+            Instant when = instant(n.path("submittedAt"));
+            if (when != null && (before == null || when.isAfter(instant(before.path("submittedAt"))))) latest.put(by, n);
+        }
+        List<String> reReview = new ArrayList<>();
+        latest.forEach((by, n) -> {
+            Instant when = instant(n.path("submittedAt"));
+            if (List.of("CHANGES_REQUESTED", "COMMENTED").contains(n.path("state").asText()) && committed != null
+                    && when.isBefore(committed) && requested.stream().noneMatch(by::equalsIgnoreCase)) reReview.add(by);
+        });
+        if (who == null && open == 0 && requested.isEmpty()) return null;
+        return new Feedback(who, at, state, at != null && (mine == null || at.isAfter(mine)), open, reReview, requested);
     }
 
     static boolean isBot(JsonNode author) {

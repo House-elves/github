@@ -30,6 +30,10 @@ They're kept in `state/`, not in the config file.
 It reads, as your `gh` account: the open issues and PRs you're involved in, with their CI, reviews and merge
 state, and the runner's reports on its agents.
 
+On your own PR, once you've pushed since someone asked for changes (or commented in a review), the next step is
+**Ask them to review again**: it asks exactly those reviewers on GitHub, after your click in the desk's bar, and
+the PR then waits on them.
+
 An item in Your move can go to **Later** (the zz under its icon): it waits there, after Waiting on CI, until you
 do something with it (start the agent, post, merge, ...) or click its zz again. It's kept in
 `state/later.json`; nothing changes on GitHub.

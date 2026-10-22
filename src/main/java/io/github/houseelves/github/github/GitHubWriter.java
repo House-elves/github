@@ -41,6 +41,7 @@ public class GitHubWriter {
     static final Pattern APPROVE = Pattern.compile(REPO + "/actions/runs/\\d+/approve");
     static final Pattern PENDING_DEPLOYMENTS = Pattern.compile(REPO + "/actions/runs/\\d+/pending_deployments");
     static final Pattern ASSIGNEES = Pattern.compile(REPO + "/issues/\\d+/assignees");
+    static final Pattern REVIEWERS = Pattern.compile(REPO + "/pulls/\\d+/requested_reviewers");
     static final Pattern ISSUES = Pattern.compile(REPO + "/issues");
     static final Pattern PULLS = Pattern.compile(REPO + "/pulls");
     static final Pattern MERGE_UPSTREAM = Pattern.compile(REPO + "/merge-upstream");
@@ -146,6 +147,11 @@ public class GitHubWriter {
     /** Adds {@code login} (you: nobody else) to an issue's or PR's assignees. */
     public JsonNode assign(String repo, int number, String login) {
         return write("POST", "/repos/" + repo + "/issues/" + number + "/assignees", Map.of("assignees", List.of(login)));
+    }
+
+    /** Asks these people to review a PR (again): only people, no teams. */
+    public JsonNode requestReviewers(String repo, int number, List<String> logins) {
+        return write("POST", "/repos/" + repo + "/pulls/" + number + "/requested_reviewers", Map.of("reviewers", logins));
     }
 
     /** Reopens an issue or PR (with close, this re-runs a PR's CI when you can't re-run its workflows). */
@@ -275,6 +281,11 @@ public class GitHubWriter {
                     || (MERGE_UPSTREAM.matcher(path).matches() && self != null
                             && path.split("/")[2].equalsIgnoreCase(self) && body.size() == 1
                             && BRANCH.matcher(body.path("branch").asText()).matches())
+                    // Ask people (not teams, not yourself) to review a PR again.
+                    || (REVIEWERS.matcher(path).matches() && body.size() == 1 && body.path("reviewers").isArray()
+                            && body.path("reviewers").size() >= 1 && body.path("reviewers").size() <= 10
+                            && java.util.stream.StreamSupport.stream(body.path("reviewers").spliterator(), false)
+                                    .allMatch(r -> r.asText().matches("[A-Za-z0-9-]{1,39}") && !r.asText().equalsIgnoreCase(self)))
                     // Assign yourself, and only yourself.
                     || (ASSIGNEES.matcher(path).matches() && body.size() == 1 && body.path("assignees").size() == 1
                             && self != null && self.equalsIgnoreCase(body.path("assignees").path(0).asText()));

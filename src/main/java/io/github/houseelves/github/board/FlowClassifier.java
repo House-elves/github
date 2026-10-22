@@ -230,6 +230,21 @@ public final class FlowClassifier {
         }
         if (pending(i, c)) return flow("mine", MINE_STEPS, 1, Flow.CI, i.updatedAt(), "CI is running.", null, List.of());
         if (ciStarting(i, c)) return flow("mine", MINE_STEPS, 1, Flow.CI, i.updatedAt(), "Pushed. Waiting for CI to start.", null, List.of());
+        if (said != null && !said.reReview().isEmpty()) {
+            // You pushed since their review: they see it once you ask them to review again.
+            List<String> who = said.reReview();
+            String names = who.size() == 1 ? who.get(0) : String.join(", ", who.subList(0, who.size() - 1)) + " and " + who.get(who.size() - 1);
+            return flow("mine", MINE_STEPS, 2, Flow.YOU, i.updatedAt(), "You pushed since " + names + " reviewed" + openThreads(said) + ".",
+                    new Flow.Next("re-request", who.size() == 1 ? "Ask " + who.get(0) + " to review again" : "Ask them to review again",
+                            String.join(",", who)),
+                    List.of(new Flow.Next("read-review", "Read the review"), new Flow.Next("whats-new", "What's new")));
+        }
+        if ("CHANGES_REQUESTED".equals(i.reviewDecision()) && said != null && !said.requested().isEmpty()) {
+            // Changes asked for, you pushed and asked them again: theirs now.
+            return flow("mine", MINE_STEPS, 2, Flow.OTHERS, i.updatedAt(), "Waiting for " + String.join(", ", said.requested())
+                    + " to review again" + waited(i, c) + openThreads(said) + ".", null,
+                    List.of(new Flow.Next("whats-new", "What's new")));
+        }
         if ("CHANGES_REQUESTED".equals(i.reviewDecision())) {
             return flow("mine", MINE_STEPS, 2, Flow.YOU, i.updatedAt(), "A reviewer asked for changes" + openThreads(said) + ".",
                     new Flow.Next("read-review", "Read the review"), List.of(new Flow.Next("address", "Address the review")));

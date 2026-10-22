@@ -130,6 +130,7 @@ public class Actions {
             case "close" -> api.close(key(p));
             case "ready-for-review" -> api.readyForReview(key(p));
             case "assign-me" -> api.assignMe(key(p));
+            case "re-request-review" -> api.reRequestReview(key(p), text(p, "reviewers"));
             case "ci-rerun" -> api.ciRerun(key(p));
             case "ci-approve" -> api.ciApprove(key(p));
             case "ask-dependabot-to-rebase" -> api.askDependabotToRebase(key(p));

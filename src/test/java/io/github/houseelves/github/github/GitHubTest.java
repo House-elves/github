@@ -264,6 +264,27 @@ class GitHubTest {
     }
 
     @Test
+    void whoToAskAgainIsWhoReviewedBeforeYourLatestCommitAndIsntAskedYet() throws Exception {
+        JsonNode pr = json("""
+                {"lastCommit": {"nodes": [{"commit": {"committedDate": "2026-10-14T10:00:00Z"}}]},
+                 "allReviews": {"nodes": [
+                   {"state": "CHANGES_REQUESTED", "submittedAt": "2026-10-13T14:00:00Z", "author": {"__typename": "User", "login": "brunobat"}},
+                   {"state": "COMMENTED", "submittedAt": "2026-10-13T15:00:00Z", "author": {"__typename": "User", "login": "geoand"}},
+                   {"state": "APPROVED", "submittedAt": "2026-10-13T16:00:00Z", "author": {"__typename": "User", "login": "gsmet"}},
+                   {"state": "COMMENTED", "submittedAt": "2026-10-14T11:00:00Z", "author": {"__typename": "User", "login": "mkouba"}},
+                   {"state": "COMMENTED", "submittedAt": "2026-10-13T12:00:00Z", "author": {"__typename": "Bot", "login": "quarkus-bot"}}]},
+                 "comments": {"nodes": []},
+                 "reviewThreads": {"nodes": []},
+                 "reviewRequests": {"nodes": [{"requestedReviewer": {"__typename": "User", "login": "geoand"}}]}}
+                """);
+        GitHub.Feedback f = GitHub.feedback(pr, "phillip-kruger");
+        // gsmet approved, mkouba spoke after your commit, geoand is asked already, the bot doesn't count.
+        assertEquals(List.of("brunobat"), f.reReview());
+        assertEquals(List.of("geoand"), f.requested());
+        assertEquals(List.of(), f.asked(List.of("brunobat")).reReview());
+    }
+
+    @Test
     void reviewsPutOpenThreadsWithNewRepliesFirstAndSkipBotsAndEmptyWrappers() throws Exception {
         JsonNode pr = json("""
                 {"url": "https://github.com/quarkusio/quarkus/pull/56951",

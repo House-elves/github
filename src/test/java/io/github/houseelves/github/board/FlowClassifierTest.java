@@ -180,6 +180,23 @@ class FlowClassifierTest {
     }
 
     @Test
+    void youPushedSinceTheReviewSoAskThemAgain() {
+        Item pushed = pr2(ME, "SUCCESS", "BLOCKED", "MERGEABLE", false, false, "CHANGES_REQUESTED");
+        Instant at = NOW.minusSeconds(7200);
+        Flow f = FlowClassifier.flow("mine", pushed, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
+                new GitHub.Feedback("brunobat", at, "CHANGES_REQUESTED", false, 0, List.of("brunobat"), List.of())));
+        is(f, Flow.YOU, 2, "re-request");
+        assertEquals("Ask brunobat to review again", f.next().label());
+        assertEquals("brunobat", f.next().target());
+        assertEquals("You pushed since brunobat reviewed.", f.say());
+        // Asked: waiting on them.
+        f = FlowClassifier.flow("mine", pushed, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
+                new GitHub.Feedback("brunobat", at, "CHANGES_REQUESTED", false, 0, List.of(), List.of("brunobat"))));
+        is(f, Flow.OTHERS, 2, null);
+        org.junit.jupiter.api.Assertions.assertTrue(f.say().startsWith("Waiting for brunobat to review again"), f.say());
+    }
+
+    @Test
     void afterTheAgentExplainedFailingCiTheNextStepIsTheFix() {
         Item red = pr2(ME, "FAILURE", "UNSTABLE", "MERGEABLE", false, false, null);
         is(FlowClassifier.flow("mine", red, ctx(thread("working", "ci-why", null), null, null, null, List.of())), Flow.AGENT, 1, "open");

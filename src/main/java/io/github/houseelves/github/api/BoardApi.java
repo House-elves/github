@@ -192,6 +192,23 @@ public class BoardApi {
     }
 
     /** Assign yourself to an issue or PR on GitHub. */
+    /**
+     * Asks the reviewers of your PR to review it again, after you pushed since their review. Only those GitHub says
+     * reviewed before your latest commit, read now: {@code reviewers} (what the confirm bar named) must be them.
+     */
+    public boolean reRequestReview(String itemKey, String reviewers) {
+        GitHub.PrDetails d = github.prDetails(token(), List.of(itemKey), login).get(itemKey);
+        List<String> due = d == null || d.feedback() == null ? List.of() : d.feedback().reReview();
+        List<String> asked = java.util.Arrays.stream(reviewers.split(",")).map(String::strip).filter(r -> !r.isEmpty()).toList();
+        if (asked.isEmpty() || !asked.stream().allMatch(a -> due.stream().anyMatch(a::equalsIgnoreCase))) {
+            throw new IllegalStateException("Only " + (due.isEmpty() ? "nobody" : String.join(", ", due))
+                    + " reviewed before your latest commit, so only they can be asked again. Refresh the board.");
+        }
+        poster.requestReviewers(itemKey, asked, login);
+        boards.markReviewRequested(login, itemKey, asked);
+        return true;
+    }
+
     public boolean assignMe(String itemKey) {
         poster.assign(itemKey, login);
         boards.markAssigned(login, itemKey);

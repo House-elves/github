@@ -301,6 +301,17 @@ public class BoardService {
     }
 
     /** Adds you to one item's assignees in the cached board (an issue moves to Assigned issues). */
+    /** You asked them to review again: the board shows it waiting on them, until the next refresh says. */
+    public void markReviewRequested(String login, String itemKey, List<String> logins) {
+        feedback.computeIfPresent(login, (l, said) -> {
+            Map<String, GitHub.Feedback> next = new HashMap<>(said);
+            next.computeIfPresent(itemKey, (k, f) -> f.asked(logins));
+            return next;
+        });
+        save(login);
+        live.boardUpdated();
+    }
+
     public void markAssigned(String login, String itemKey) {
         load();
         cache.computeIfPresent(login, (l, f) -> new BoardClassifier.Fetched(f.login(), f.at(),

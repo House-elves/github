@@ -95,7 +95,14 @@ class GitHubWriterTest {
         w.approveRun("a/b", 6);
         w.approveDeployment("a/b", 7, List.of(9L));
         w.reopen("a/b", 1);
-        assertEquals(8, sent.size());
+        w.requestReviewers("a/b", 1, List.of("brunobat"));
+        assertEquals(9, sent.size());
+
+        // Reviewers: people, not yourself, at most 10.
+        assertFalse(GitHubWriter.allowedWrite("POST", "/repos/a/b/pulls/1/requested_reviewers",
+                mapper.createObjectNode().set("reviewers", mapper.valueToTree(List.of("phillip-kruger"))), "phillip-kruger"));
+        assertFalse(GitHubWriter.allowedWrite("POST", "/repos/a/b/pulls/1/requested_reviewers",
+                mapper.createObjectNode().put("team_reviewers", "x"), "phillip-kruger"));
 
         assertFalse(GitHubWriter.allowedWrite("DELETE", "/repos/a/b", mapper.createObjectNode(), "phillip-kruger"));
         assertFalse(GitHubWriter.allowedWrite("POST", "/repos/a/b/git/refs", mapper.createObjectNode(), "phillip-kruger"));
