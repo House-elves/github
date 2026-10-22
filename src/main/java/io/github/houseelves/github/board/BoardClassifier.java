@@ -19,8 +19,8 @@ import io.github.houseelves.github.scope.Scope;
  * <li>anything you chose to ignore goes to the ignored list;</li>
  * <li>anything outside the scope is hidden, review requests included;</li>
  * <li>your own PRs; then PRs you were asked to review or have reviewed (they stay until merged or closed, even
- * after you approve, which removes GitHub's review request); then issues assigned to you; then everything else
- * you're involved in.</li>
+ * after you approve, which removes GitHub's review request); then issues assigned to you, and issues in repos you
+ * maintain that nobody else is assigned; then everything else you're involved in.</li>
  * </ol>
  */
 public final class BoardClassifier {
@@ -46,6 +46,11 @@ public final class BoardClassifier {
     }
 
     public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys) {
+        return classify(f, scope, refreshMinutes, ignoredKeys, Set.of());
+    }
+
+    /** @param maintained repos you maintain (lower case): their issues are yours unless someone else has them */
+    public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys, Set<String> maintained) {
         List<Item> ignored = new ArrayList<>();
         Set<String> reviewKeys = new HashSet<>();
         f.reviewRequested().forEach(i -> reviewKeys.add(i.key()));
@@ -65,7 +70,8 @@ public final class BoardClassifier {
                 lanes.get(MINE).add(item);
             } else if (reviewKeys.contains(item.key())) {
                 lanes.get(REVIEW).add(item);
-            } else if (!item.isPr() && item.assignees().stream().anyMatch(a -> a.equalsIgnoreCase(f.login()))) {
+            } else if (!item.isPr() && (item.assignees().stream().anyMatch(a -> a.equalsIgnoreCase(f.login()))
+                    || item.assignees().isEmpty() && maintained.contains(item.repo().toLowerCase(java.util.Locale.ROOT)))) {
                 lanes.get(ASSIGNED).add(item);
             } else {
                 lanes.get(INVOLVED).add(item);

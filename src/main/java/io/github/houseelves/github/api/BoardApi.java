@@ -376,7 +376,7 @@ public class BoardApi {
         return new SettingsView(login, rows, settings.refreshMinutes(), settings.alwaysInvolved());
     }
 
-    /** A repo you maintain: its open PRs come to "Needs my review" and its issues to the board, involved or not. */
+    /** A repo you maintain: its open PRs come to "Needs my review" and its unassigned issues are yours, involved or not. */
     public SettingsView addAlwaysInvolved(String repo) {
         String name = ScopeService.repoName(repo);
         // GitHub refuses a whole search that names a repo it can't find, so only real ones go in.

@@ -56,6 +56,21 @@ class BoardClassifierTest {
     }
 
     @Test
+    void anIssueInARepoYouMaintainIsYours() throws Exception {
+        Item open = issue("quarkusio/quarkus", 31, "someone");
+        Item theirs = issue("quarkusio/quarkus", 32, "someone", "someone-else");
+        Item elsewhere = issue("smallrye/smallrye-graphql", 33, "someone");
+        BoardClassifier.Fetched f = new BoardClassifier.Fetched(ME, Instant.now(), List.of(open, theirs, elsewhere),
+                List.of(), List.of(), false);
+
+        Board b = BoardClassifier.classify(f, QUARKUS_AND_SMALLRYE, 5, Set.of(), Set.of("quarkusio/quarkus"));
+
+        assertEquals(List.of("quarkusio/quarkus#31"), lane(b, BoardClassifier.ASSIGNED));
+        // Someone else has it, or it's not your repo: just involved.
+        assertEquals(Set.of("quarkusio/quarkus#32", "smallrye/smallrye-graphql#33"), Set.copyOf(lane(b, BoardClassifier.INVOLVED)));
+    }
+
+    @Test
     void aPrYouReviewedStaysInNeedsMyReviewAfterTheRequestIsGone() throws Exception {
         Item approvedByMe = pr("quarkusio/quarkus", 11, "someone");
         // GitHub drops the review request when you review: it only shows up in involves and reviewed-by.

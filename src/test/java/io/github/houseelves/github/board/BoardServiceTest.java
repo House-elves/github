@@ -135,7 +135,7 @@ class BoardServiceTest {
     }
 
     @Test
-    void reposYouMaintainBringEveryPrToReviewAndEveryIssueToTheBoard() {
+    void reposYouMaintainBringEveryPrToReviewAndEveryIssueToYou() {
         when(scopes.scope()).thenReturn(new Scope(Set.of("quarkusio", "quarkiverse"), Set.of(), Set.of()));
         when(settings.alwaysInvolved()).thenReturn(List.of("quarkiverse/quarkus-agent-mcp"));
         involvedReturns();
@@ -146,7 +146,8 @@ class BoardServiceTest {
         Map<String, List<String>> lanes = new java.util.HashMap<>();
         b.lanes().forEach(l -> lanes.put(l.id(), l.items().stream().map(Item::key).toList()));
         assertEquals(List.of("quarkiverse/quarkus-agent-mcp#5"), lanes.get(BoardClassifier.REVIEW));
-        assertEquals(List.of("quarkiverse/quarkus-agent-mcp#6"), lanes.get(BoardClassifier.INVOLVED));
+        // Nobody has the issue: it's yours to look at, like one assigned to you.
+        assertEquals(List.of("quarkiverse/quarkus-agent-mcp#6"), lanes.get(BoardClassifier.ASSIGNED));
     }
 
     @Test

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -148,6 +149,13 @@ public class BoardService {
         return classify(fetched, refreshing);
     }
 
+    /** The repos you maintain, lower case. */
+    private Set<String> maintained() {
+        Set<String> repos = new HashSet<>();
+        settings.alwaysInvolved().forEach(r -> repos.add(r.toLowerCase(Locale.ROOT)));
+        return repos;
+    }
+
     /** What a fetch shows, without keeping it or bringing back ignored items: the elf's dry run. */
     public Board preview(String login, String token) {
         return classify(fetchNow(login, token, false), false);
@@ -155,7 +163,8 @@ public class BoardService {
 
     private Board classify(BoardClassifier.Fetched fetched, boolean refreshing) {
         String login = fetched.login();
-        return BoardClassifier.classify(fetched, scopes.scope(), settings.refreshMinutes(), ignores.keys()).refreshing(refreshing).returned(ignores.recentlyReturned())
+        return BoardClassifier.classify(fetched, scopes.scope(), settings.refreshMinutes(), ignores.keys(),
+                maintained()).refreshing(refreshing).returned(ignores.recentlyReturned())
                 .sinceReview(sinceReview.getOrDefault(login, Map.of()))
                 .reviewedAt(reviewedAt.getOrDefault(login, Map.of()))
                 .feedback(feedback.getOrDefault(login, Map.of()))

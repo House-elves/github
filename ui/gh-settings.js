@@ -238,8 +238,8 @@ class GhSettings extends LitElement {
         return html`
             <section aria-labelledby="maintained">
                 <div class="head"><h2 id="maintained">Repos I maintain</h2>
-                    <p class="hint">Every open PR in these comes to Needs my review, and every open issue to the board,
-                        even when GitHub doesn't count you as involved.</p></div>
+                    <p class="hint">Every open PR in these comes to Needs my review, and every open issue nobody else is
+                        assigned to is your move, even when GitHub doesn't count you as involved.</p></div>
                 <div class="panel">
                     ${repos.length === 0 ? html`<p class="empty">None yet.</p>` : html`<ul>${repos.map(r => html`
                         <li><span class="name">${r}</span>
