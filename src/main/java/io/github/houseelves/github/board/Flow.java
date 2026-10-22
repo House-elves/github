@@ -11,7 +11,8 @@ import java.util.List;
  * @param steps   the flow's stages, for the row's stepper; empty when the item has no flow (involved)
  * @param step    the current stage, an index into {@code steps}
  * @param waiting whose move it is: {@link #YOU}, {@link #AGENT}, {@link #CI}, {@link #OTHERS}, {@link #DONE},
- *                {@link #WATCHING} or {@link #PARKED} (your draft PRs: on ice until you mark them ready)
+ *                {@link #WATCHING}, {@link #PARKED} (your draft PRs: on ice until you mark them ready) or
+ *                {@link #LATER} (your move, put aside for later)
  * @param since   when it started waiting there (best effort), for "for 3 days"
  * @param say     one sentence on where it is
  * @param next    the main action, or null when there is nothing for you to do
@@ -21,7 +22,7 @@ public record Flow(String role, List<String> steps, int step, String waiting, In
         List<Next> more) {
 
     public static final String YOU = "you", AGENT = "agent", CI = "ci", OTHERS = "others", DONE = "done",
-            WATCHING = "watching", PARKED = "parked";
+            WATCHING = "watching", PARKED = "parked", LATER = "later";
 
     /**
      * An action the page knows how to run.

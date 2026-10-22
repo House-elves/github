@@ -100,6 +100,16 @@ public record Board(
                 FlowClassifier.flows(this, now), feedback, rebasing);
     }
 
+    /** Your move, but put aside for later: under Later instead (its steps stay, and taking one brings it back). */
+    public Board later(java.util.Set<String> keys) {
+        if (flows == null || keys.isEmpty()) return this;
+        Map<String, Flow> out = new java.util.LinkedHashMap<>(flows);
+        out.replaceAll((key, f) -> keys.contains(key) && Flow.YOU.equals(f.waiting())
+                ? f.with(Flow.LATER, f.since(), f.say(), f.next(), f.more()) : f);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, out, feedback, rebasing);
+    }
+
     /** Adds the open PRs that fix or mention each issue. */
     public Board linkedPrs(Map<String, List<GitHub.LinkedPr>> links) {
         return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,

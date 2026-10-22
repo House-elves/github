@@ -28,6 +28,7 @@ public class Elf {
     public final ScopeService scopes;
     public final Settings settings;
     public final IgnoreService ignores;
+    public final io.github.houseelves.github.later.LaterService later;
     public final GitHub github;
     public final GitHubWriter writer;
     public final Agents agents;
@@ -54,6 +55,7 @@ public class Elf {
         this.scopes = new ScopeService(home.state());
         this.settings = new Settings(home.state());
         this.ignores = new IgnoreService(home.state(), store);
+        this.later = new io.github.houseelves.github.later.LaterService(home.state());
         this.agents = new Agents(home.agents());
         this.boards = new BoardService(github, scopes, settings, live, ignores, home.board());
         this.threads = new ThreadService(github, store, agents, live);
@@ -62,6 +64,6 @@ public class Elf {
         this.ci = new CiService(github, writer, threads, store, live);
         this.conflicts = new ConflictService(github, writer, threads, store, live);
         this.api = new BoardApi(login, token, boards, scopes, settings, threads, poster, merges, ci,
-                github, conflicts, ignores, live);
+                github, conflicts, ignores, later, live);
     }
 }

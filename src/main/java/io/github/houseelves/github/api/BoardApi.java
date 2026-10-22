@@ -39,11 +39,13 @@ public class BoardApi {
     final GitHub github;
     final ConflictService conflicts;
     final IgnoreService ignores;
+    final io.github.houseelves.github.later.LaterService later;
     final Live live;
 
     public BoardApi(String login, Supplier<String> token, BoardService boards, ScopeService scopes, Settings settings,
             ThreadService threads, Poster poster, MergeService merges, CiService ci,
-            GitHub github, ConflictService conflicts, IgnoreService ignores, Live live) {
+            GitHub github, ConflictService conflicts, IgnoreService ignores,
+            io.github.houseelves.github.later.LaterService later, Live live) {
         this.login = login;
         this.token = token;
         this.boards = boards;
@@ -56,6 +58,7 @@ public class BoardApi {
         this.github = github;
         this.conflicts = conflicts;
         this.ignores = ignores;
+        this.later = later;
         this.live = live;
     }
 
@@ -69,7 +72,7 @@ public class BoardApi {
     public Board board(boolean refresh) {
         return boards.board(login, refresh || !boards.cached(login) ? token() : null, refresh)
                 .with(threads.summaries(), merges.recent(), true)
-                .withFlows(java.time.Instant.now());
+                .withFlows(java.time.Instant.now()).later(later.keys());
     }
 
     /**
@@ -212,6 +215,17 @@ public class BoardApi {
     }
 
     // ---- ignore ----
+
+    /** Puts an item you'd have to move on aside, under Later. Nothing changes on GitHub. */
+    public void later(String itemKey) {
+        later.later(itemKey);
+        live.boardUpdated();
+    }
+
+    /** Back to Your move: you asked, or you did something with it. */
+    public void now(String itemKey) {
+        if (later.back(itemKey)) live.boardUpdated();
+    }
 
     /** Move an item to Ignored: you're involved, but someone else is handling it. Nothing changes on GitHub. */
     public void ignore(String itemKey) {

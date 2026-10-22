@@ -104,6 +104,34 @@ class ActionsTest {
     }
 
     @Test
+    void laterPutsYourMoveAsideUntilYouDoSomethingWithIt() throws Exception {
+        when(github.search(anyString(), contains("review-requested:@me"), anyInt())).thenReturn(new GitHub.SearchResult(
+                List.of(pr("quarkusio/quarkus", 50087, "someone")), 1));
+        TestElf.create(dir, github, writer).api.watch("quarkusio");
+        Elf refreshed = TestElf.create(dir, github, writer);
+        refreshed.api.board(true);
+        refreshed.live.boardUpdated();
+        Views.write(refreshed);
+        assertEquals("you", file("board/board.json").path("flows").path(KEY).path("waiting").asText());
+
+        act("later", "{\"itemKey\": \"" + KEY + "\"}");
+        assertEquals("later", file("board/board.json").path("flows").path(KEY).path("waiting").asText());
+        // Reading it isn't doing something with it.
+        act("is-ignored", "{\"itemKey\": \"" + KEY + "\"}");
+        assertEquals("later", file("board/board.json").path("flows").path(KEY).path("waiting").asText());
+
+        // Starting the agent on it is: it's out of Later (and the agent's now).
+        act("start", "{\"itemKey\": \"" + KEY + "\", \"action\": \"review\", \"question\": null}");
+        assertTrue(TestElf.create(dir, github, writer).later.keys().isEmpty());
+        assertEquals("agent", file("board/board.json").path("flows").path(KEY).path("waiting").asText());
+
+        // And back by hand.
+        act("later", "{\"itemKey\": \"" + KEY + "\"}");
+        act("now", "{\"itemKey\": \"" + KEY + "\"}");
+        assertTrue(TestElf.create(dir, github, writer).later.keys().isEmpty());
+    }
+
+    @Test
     void aPushIsAnsweredForTheRunnerWithTheTokenAndFinishedByPostDone() throws Exception {
         Elf elf = TestElf.create(dir, github, writer);
         elf.threads.start(KEY, "review", null, "phillip-kruger", "t");

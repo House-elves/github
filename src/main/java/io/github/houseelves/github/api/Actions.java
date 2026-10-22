@@ -31,6 +31,11 @@ public class Actions {
     public static final Set<String> READS = Set.of("about", "pr-diff", "pr-activity", "pr-reviews", "commit-count",
             "merge-options", "conflict-options");
 
+    /** What isn't doing something with an item: reading it, and the runner's callbacks. Any other action takes it out of Later. */
+    static final Set<String> NOT_DOING = Set.of("item", "about", "thread", "pr-diff", "pr-activity", "pr-reviews", "ci-report",
+            "conflict-options", "commit-count", "merge-options", "merge-status", "suggestions", "preview-post", "settings",
+            "is-ignored", "seen", "post-done", "squash-done", "agent-done", "later", "now");
+
     /** Reads whose answers go in cache/. */
     static final Set<String> TO_FILE = Set.of("pr-diff", "pr-activity", "pr-reviews", "ci-report");
 
@@ -70,6 +75,14 @@ public class Actions {
             // local changes
             case "update-draft" -> api.updateDraft(p.path("draftId").asLong(), draft(p.path("draft").asText("")));
             case "discard-draft" -> api.discardDraft(p.path("draftId").asLong());
+            case "later" -> {
+                api.later(key(p));
+                yield null;
+            }
+            case "now" -> {
+                api.now(key(p));
+                yield null;
+            }
             case "ignore" -> {
                 api.ignore(key(p));
                 yield null;
@@ -130,6 +143,8 @@ public class Actions {
             case "merge-without-approval" -> api.mergeWithoutApproval(key(p), text(p, "method"), text(p, "headSha"));
             default -> throw new IllegalArgumentException("Not one of the GitHub elf's actions: " + action);
         };
+        // You did something with it: if it was put aside for later, it's your move again.
+        if (!NOT_DOING.contains(action) && p.path("itemKey").isTextual()) api.now(p.path("itemKey").asText());
         JsonNode json = answer == null ? mapper.nullNode() : mapper.valueToTree(answer);
         if (TO_FILE.contains(action) || (!forRunner(json) && json.toString().length() > MAX_LINE)) {
             return toFile(action, p, json);

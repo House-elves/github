@@ -30,6 +30,10 @@ They're kept in `state/`, not in the config file.
 It reads, as your `gh` account: the open issues and PRs you're involved in, with their CI, reviews and merge
 state, and the runner's reports on its agents.
 
+An item in Your move can go to **Later** (under More actions): it waits there, after Waiting on CI, until you
+do something with it (start the agent, post, merge, ...) or bring it back with **Your move now**. It's kept in
+`state/later.json`; nothing changes on GitHub.
+
 Dependabot's org.mvnpm bumps aren't on the board: the mvnpm tab (the mvnpm-dependabot elf) handles them.
 
 It writes its files in `~/.config/github/` (each written whole, then moved into place):

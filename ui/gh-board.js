@@ -21,6 +21,7 @@ const SECTIONS = [
     { id: 'you', title: 'Your move', empty: 'Nothing needs you right now.' },
     { id: 'agent', title: 'Agent working' },
     { id: 'ci', title: 'Waiting on CI' },
+    { id: 'later', title: 'Later' },
     { id: 'others', title: 'Waiting on others', fold: true },
     { id: 'parked', title: 'Draft PRs', fold: true },
     { id: 'done', title: 'Done', fold: true },
@@ -120,6 +121,7 @@ class GhBoard extends LitElement {
         /** What the open row shows under it: thread (the agent), review (Read the review) or activity (What's new). */
         _panel: { state: true },
         _ignoring: { state: true },
+        _moving: { state: true },        // the item going to Later or back to Your move
         _unfolded: { state: true },
         _filter: { state: true },
     };
@@ -281,6 +283,7 @@ class GhBoard extends LitElement {
         this._mergeAnyway = null;
         this._panel = 'thread';
         this._ignoring = null;
+        this._moving = null;
         this._unfolded = new Set();
         this._filter = filter ?? { text: '', tags: new Set() };
         if (!filter) loadFilter().then(f => { if (!filter) { filter = f; this._filter = f; } });
@@ -408,6 +411,22 @@ class GhBoard extends LitElement {
             this._error = `Couldn't ${ignore ? 'ignore' : 'stop ignoring'} ${item.key}: ${errorMessage(e)}`;
         } finally {
             this._ignoring = null;
+        }
+    }
+
+    /** Your move, but not now: under Later until you do something with it (or bring it back). */
+    async _later(item, later) {
+        this._moving = item.key;
+        this._error = null;
+        try {
+            await act(later ? 'later' : 'now', { itemKey: item.key });
+            this._moreFor = null;
+            if (this._open === item.key) this._open = null;
+            this._setBoard(await board());
+        } catch (e) {
+            this._error = `Couldn't move ${item.key} ${later ? 'to Later' : 'back to Your move'}: ${errorMessage(e)}`;
+        } finally {
+            this._moving = null;
         }
     }
 
@@ -752,6 +771,10 @@ class GhBoard extends LitElement {
             ${!merged && item.kind === 'PR' && !ids.has('whats-new') ? this._action(item, { id: 'whats-new', label: "What's new" }, false) : ''}
             ${f.role === 'involved' && !assigned ? this._action(item, { id: 'assign', label: 'Assign me' }, false) : ''}
             <a class="btn sm quiet" href=${threadHref(item.key)}>Open page</a>
+            ${f.waiting === 'you' || f.waiting === 'later' ? html`<button class="sm quiet" ?disabled=${this._moving !== null}
+                @click=${() => this._later(item, f.waiting === 'you')}
+                title=${f.waiting === 'you' ? 'Not now: under Later until you do something with it'
+                    : 'Back to Your move'}>${this._moving === item.key ? spinner : ''}${f.waiting === 'you' ? 'Later' : 'Your move now'}</button>` : ''}
             ${!merged && !ids.has('ignore') ? html`<button class="sm quiet" ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, true)}
                 title="Someone else is handling it: move it to Ignored">${this._ignoring === item.key ? spinner : ''}Ignore</button>` : ''}
             ${!merged && !ids.has('close') ? this._closeButton(item) : ''}
