@@ -1,0 +1,405 @@
+# A House Elves elf: what Elf Desk needs to install, set up and run the GitHub elf. It is the desk's GitHub board:
+# the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
+name: github
+title: GitHub
+description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
+main: GitHubElf.java
+config: ~/.config/github/config
+tools: [gh, git, claude]
+
+reads:
+  - The open issues and PRs you're involved in on GitHub, with their CI, reviews and merge state, as your gh account.
+  - What mvnpm-dependabot recorded about its PRs, if it's set up on this machine.
+  - The runner's reports on the agents this elf starts.
+writes:
+  - The board, its threads and its settings, in ~/.config/github/.
+  - On GitHub, only when you click and confirm it in the desk's bar, as your gh account - reviews, comments, new issues and PRs, closing and assigning, merges pinned to the head you saw, CI re-runs and approvals, branch updates.
+  - Pushes the agent's commits (through the runner) when you confirm the push.
+  - Starts mvnpm-dependabot checks when you ask for one.
+
+settings:
+  - key: GITHUB_ACCOUNT
+    label: GitHub account
+    help: The gh account the board works as (gh auth login as it first). Its token is read from gh each time, never stored.
+    kind: login
+
+commands:
+  refresh:
+    label: Refresh the board
+    args: [--refresh]
+  dry-run:
+    label: Fetch the board without writing anything
+    args: [--dry-run]
+
+dry-run: dry-run
+
+# Its tab (and dashboard card), drawn by ui/board.js in the desk's sandboxed frame, from the files below.
+tab:
+  page: ui/board.js
+  card: true
+# Every 5 minutes on weekdays, 07:00 to 19:00.
+refresh:
+  command: refresh
+  schedule: "Mon..Fri *-*-* 7..19:00; Mon..Fri *-*-* 7..18:05; Mon..Fri *-*-* 7..18:10; Mon..Fri *-*-* 7..18:15; Mon..Fri *-*-* 7..18:20; Mon..Fri *-*-* 7..18:25; Mon..Fri *-*-* 7..18:30; Mon..Fri *-*-* 7..18:35; Mon..Fri *-*-* 7..18:40; Mon..Fri *-*-* 7..18:45; Mon..Fri *-*-* 7..18:50; Mon..Fri *-*-* 7..18:55"
+data: [board, threads, state, cache]
+
+# Its agents report in ~/.config/github/agents; when one ends, the runner calls agent-done with its id.
+agents:
+  done: agent-done
+
+# What the tab may ask for. Values come as JSON on stdin, each checked here first. An item is owner/repo#123.
+actions:
+
+  # ---- reads ----
+
+  item:
+    label: Read an item from GitHub
+    args: [--action=item]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  about:
+    label: Read what an item is about
+    args: [--action=about]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  thread:
+    label: Read an item's thread
+    args: [--action=thread]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  pr-diff:
+    label: Read a PR's diff
+    args: [--action=pr-diff]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  pr-activity:
+    label: Read what's new on a PR
+    args: [--action=pr-activity]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  pr-reviews:
+    label: Read a PR's reviews
+    args: [--action=pr-reviews]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-report:
+    label: Read a PR's CI
+    args: [--action=ci-report]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  conflict-options:
+    label: Read how a PR's conflicts can be resolved
+    args: [--action=conflict-options]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  commit-count:
+    label: Count a PR's commits
+    args: [--action=commit-count]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  merge-options:
+    label: Read how a PR can be merged
+    args: [--action=merge-options]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  merge-status:
+    label: Read a PR's merge on green
+    args: [--action=merge-status]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  suggestions:
+    label: Suggest orgs to watch
+    args: [--action=suggestions]
+    ask: false
+  preview-post:
+    label: Show exactly what a post sends
+    args: [--action=preview-post]
+    ask: false
+    params:
+      draftId: {kind: int}
+  settings:
+    label: Read the board's settings
+    args: [--action=settings]
+    ask: false
+  is-ignored:
+    label: Is an item ignored
+    args: [--action=is-ignored]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+
+  # ---- changes on this machine only ----
+
+  update-draft:
+    label: Save your edit of a draft
+    args: [--action=update-draft]
+    ask: false
+    params:
+      draftId: {kind: int}
+      # The edited draft as JSON ({kind, event, body, comments, repo, title, then}): an action's values are plain.
+      draft: {pattern: '\{[\s\S]*\}', max: 200000}
+  discard-draft:
+    label: Discard a draft
+    args: [--action=discard-draft]
+    ask: false
+    params:
+      draftId: {kind: int}
+  ignore:
+    label: Ignore an item
+    args: [--action=ignore]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  unignore:
+    label: Stop ignoring an item
+    args: [--action=unignore]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-reopen:
+    label: Close and reopen your PR to run CI again
+    args: [--action=ci-reopen]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  cancel-merge:
+    label: Cancel a merge on green
+    args: [--action=cancel-merge]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  watch:
+    label: Watch an org, a user or a repo
+    args: [--action=watch]
+    ask: false
+    params:
+      name: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}(/[A-Za-z0-9._-]{1,100})?/?\s*', max: 300}
+  watch-all:
+    label: Watch these owners
+    args: [--action=watch-all]
+    ask: false
+    params:
+      # Owners, comma or space separated: an action's values can't be lists of text.
+      owners: {pattern: '[A-Za-z0-9 ,-]{1,4000}', max: 4000}
+  exclude:
+    label: Stop showing one repo of a watched owner
+    args: [--action=exclude]
+    ask: false
+    params:
+      repo: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/?\s*', max: 300}
+  remove:
+    label: Remove a row of what the board watches
+    args: [--action=remove]
+    ask: false
+    params:
+      id: {kind: int}
+  add-always-involved:
+    label: Add a repo you maintain
+    args: [--action=add-always-involved]
+    ask: false
+    params:
+      repo: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/?\s*', max: 300}
+  remove-always-involved:
+    label: Remove a repo you maintain
+    args: [--action=remove-always-involved]
+    ask: false
+    params:
+      repo: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/?\s*', max: 300}
+  set-mvnpm-enabled:
+    label: Turn the mvnpm lane on or off
+    args: [--action=set-mvnpm-enabled]
+    ask: false
+    params:
+      on: {kind: bool}
+  set-refresh-minutes:
+    label: Set how often the board refreshes
+    args: [--action=set-refresh-minutes]
+    ask: false
+    params:
+      minutes: {kind: int}
+  seen:
+    label: The thread page showed an item's thread
+    args: [--action=seen]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  post-done:
+    label: Finish a post once the runner pushed
+    args: [--action=post-done]
+    ask: false
+    params:
+      draftId: {kind: int}
+      status: {kind: int}
+      error: {pattern: '[\s\S]*', max: 4000, optional: true}
+  squash-done:
+    label: Offer the runner's squashed commit as a push
+    args: [--action=squash-done]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      status: {kind: int}
+      body: {pattern: '[\s\S]*', max: 200000, optional: true}
+      error: {pattern: '[\s\S]*', max: 4000, optional: true}
+  agent-done:
+    label: Take in an agent's answer
+    args: [--action=agent-done]
+    ask: false
+    params:
+      id: {pattern: '[a-z0-9][a-z0-9-]{0,79}', max: 80}
+
+  # ---- agent starts: they write nothing to GitHub ----
+
+  start:
+    label: Start the agent on an item
+    args: [--action=start]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      action: {one-of: [review, investigate, fix, ask]}
+      question: {pattern: '[\s\S]*', max: 65000, optional: true}
+  fix-review:
+    label: Have the agent make its review's fixes
+    args: [--action=fix-review]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  reply:
+    label: Reply to the agent
+    args: [--action=reply]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      text: {pattern: '[\s\S]*', max: 65000}
+  ci-why:
+    label: Ask the agent why CI fails
+    args: [--action=ci-why]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-why-again:
+    label: Ask the agent again why CI fails
+    args: [--action=ci-why-again]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-fix:
+    label: Have the agent fix CI
+    args: [--action=ci-fix]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  address-review:
+    label: Have the agent address the review
+    args: [--action=address-review]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  resolve-conflicts:
+    label: Have the agent resolve the conflicts
+    args: [--action=resolve-conflicts]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  cancel:
+    label: Stop the agent
+    args: [--action=cancel]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+
+  # ---- writes to GitHub: each waits for your click in the desk's bar ----
+
+  post:
+    label: Post a draft to GitHub
+    args: [--action=post]
+    confirm: "Post this {kind} on {itemKey} to GitHub, as you?"
+    params:
+      draftId: {kind: int}
+      confirm: {pattern: '[0-9a-f-]{36}', max: 36}
+      asDraft: {kind: bool, optional: true}
+      # For the confirm bar's words; the elf refuses them unless they're the draft's.
+      kind: {one-of: [review, comment, push, issue, pr], optional: true}
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300, optional: true}
+  close:
+    label: Close an item on GitHub
+    args: [--action=close]
+    confirm: "Close {itemKey} on GitHub?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ready-for-review:
+    label: Mark your draft PR ready for review
+    args: [--action=ready-for-review]
+    confirm: "Mark {itemKey} ready for review on GitHub?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  assign-me:
+    label: Assign yourself on GitHub
+    args: [--action=assign-me]
+    confirm: "Assign yourself to {itemKey} on GitHub?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-rerun:
+    label: Re-run the failed CI jobs
+    args: [--action=ci-rerun]
+    confirm: "Re-run the failed CI jobs of {itemKey} on GitHub?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ci-approve:
+    label: Approve CI to run
+    args: [--action=ci-approve]
+    confirm: "Approve the workflow runs waiting on {itemKey}, so CI runs?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  ask-dependabot-to-rebase:
+    label: Ask Dependabot to rebase
+    args: [--action=ask-dependabot-to-rebase]
+    confirm: "Comment \"@dependabot rebase\" on {itemKey}, as you?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  update-branch:
+    label: Update the PR's branch
+    args: [--action=update-branch]
+    confirm: "Rebase {itemKey} on its base branch on GitHub?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      method: {one-of: [REBASE]}
+  squash:
+    label: Squash the PR into one commit
+    args: [--action=squash]
+    confirm: "Squash {itemKey} into one commit? Nothing is pushed until you confirm the push."
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+  merge-on-green:
+    label: Merge when CI is green
+    args: [--action=merge-on-green]
+    confirm: "Merge {itemKey} ({method}) once CI is green, at the head you saw?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      method: {one-of: [merge, squash, rebase]}
+      headSha: {pattern: '[0-9a-f]{40}', max: 40}
+  merge-without-approval:
+    label: Merge without an approval
+    args: [--action=merge-without-approval]
+    confirm: "Merge {itemKey} ({method}) without an approval, once CI is green?"
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      method: {one-of: [merge, squash, rebase]}
+      headSha: {pattern: '[0-9a-f]{40}', max: 40}
+  mvnpm-run:
+    label: Run an mvnpm-dependabot check
+    args: [--action=mvnpm-run]
+    confirm: "Run mvnpm-dependabot now? It comments on and approves the PRs it finds safe."
+    params:
+      repo: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+', max: 200, optional: true}
+      pr: {kind: int, optional: true}
