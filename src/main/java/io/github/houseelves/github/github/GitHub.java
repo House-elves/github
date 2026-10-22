@@ -487,7 +487,7 @@ public class GitHub {
     /** A PR's diff, at most {@code maxChars}; null when GitHub won't give one (too large, or no such PR). */
     public Diff prDiff(String token, String repo, int number, int maxChars) {
         try {
-            var r = HTTP.send(HttpRequest.newBuilder(URI.create("https://api.github.com/repos/" + repo + "/pulls/" + number))
+            var r = OneAtATime.send(HTTP, HttpRequest.newBuilder(URI.create("https://api.github.com/repos/" + repo + "/pulls/" + number))
                     .header("Authorization", "Bearer " + token).header("Accept", "application/vnd.github.diff")
                     .timeout(Duration.ofSeconds(60)).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
@@ -509,14 +509,14 @@ public class GitHub {
      */
     public String jobLogTail(String token, String repo, long jobId, int maxChars) {
         try {
-            var first = HTTP.send(HttpRequest.newBuilder(URI.create(
+            var first = OneAtATime.send(HTTP, HttpRequest.newBuilder(URI.create(
                     "https://api.github.com/repos/" + repo + "/actions/jobs/" + jobId + "/logs"))
                     .header("Authorization", "Bearer " + token).header("Accept", "application/vnd.github+json")
                     .timeout(Duration.ofSeconds(30)).GET().build(),
                     HttpResponse.BodyHandlers.discarding());
             String location = first.headers().firstValue("location").orElse(null);
             if (location == null) return null;
-            var log = HTTP.send(HttpRequest.newBuilder(URI.create(location))
+            var log = OneAtATime.send(HTTP, HttpRequest.newBuilder(URI.create(location))
                     .timeout(Duration.ofSeconds(60)).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             if (log.statusCode() != 200) return null;

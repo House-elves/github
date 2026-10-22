@@ -24,7 +24,7 @@ public class HttpGitHubApi implements GitHubApi {
     @Override
     public JsonNode graphql(String authorization, Map<String, Object> request) {
         try {
-            HttpResponse<byte[]> r = http.send(HttpRequest.newBuilder(GRAPHQL).timeout(Duration.ofSeconds(30))
+            HttpResponse<byte[]> r = OneAtATime.send(http, HttpRequest.newBuilder(GRAPHQL).timeout(Duration.ofSeconds(30))
                     .header("Authorization", authorization).header("Content-Type", "application/json")
                     .header("Accept", "application/json").header("User-Agent", "github-elf")
                     .POST(HttpRequest.BodyPublishers.ofByteArray(Json.MAPPER.writeValueAsBytes(request))).build(),

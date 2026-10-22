@@ -296,7 +296,7 @@ public class GitHubWriter {
             @Override
             public Answer rest(String method, String path, String body) {
                 try {
-                    HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create("https://api.github.com" + path))
+                    HttpResponse<String> r = OneAtATime.send(http, HttpRequest.newBuilder(URI.create("https://api.github.com" + path))
                             .timeout(Duration.ofSeconds(45))
                             .header("Authorization", "Bearer " + token.get())
                             .header("Accept", "application/vnd.github+json")
@@ -317,7 +317,7 @@ public class GitHubWriter {
             @Override
             public JsonNode graphql(ObjectNode request) {
                 try {
-                    HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create("https://api.github.com/graphql"))
+                    HttpResponse<String> r = OneAtATime.send(http, HttpRequest.newBuilder(URI.create("https://api.github.com/graphql"))
                             .timeout(Duration.ofSeconds(60))
                             .header("Authorization", "Bearer " + token.get()).header("User-Agent", "github-elf")
                             .header("Content-Type", "application/json")
