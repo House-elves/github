@@ -77,8 +77,8 @@ export async function cancel(itemKey) {
  * runner made from its worktree ({push: {status, error}}): post-done then finishes the post. Resolves with what was
  * posted ({url, pushedTo}).
  */
-export async function post({ draftId, confirm, asDraft, kind, itemKey }) {
-    const r = await act('post', { draftId, confirm, asDraft, kind, itemKey });
+export async function post({ draftId, confirm, asDraft, kind, itemKey, askAgain }) {
+    const r = await act('post', { draftId, confirm, asDraft, kind, itemKey, ...(askAgain ? { askAgain } : {}) });
     if (r?.push) return act('post-done', { draftId, status: r.push.status ?? 0, error: r.push.error });
     return r;
 }

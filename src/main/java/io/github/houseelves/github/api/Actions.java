@@ -126,7 +126,7 @@ public class Actions {
             // GitHub writes
             case "post" -> posted(api.post(p.path("draftId").asLong(), text(p, "confirm"),
                     p.path("asDraft").isBoolean() ? p.path("asDraft").asBoolean() : null,
-                    p.path("kind").asText(null), p.path("itemKey").asText(null)));
+                    p.path("kind").asText(null), p.path("itemKey").asText(null), p.path("askAgain").asText(null)));
             case "close" -> api.close(key(p));
             case "ready-for-review" -> api.readyForReview(key(p));
             case "assign-me" -> api.assignMe(key(p));

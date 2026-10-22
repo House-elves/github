@@ -32,7 +32,8 @@ state, and the runner's reports on its agents.
 
 On your own PR, once you've pushed since someone asked for changes (or commented in a review), the next step is
 **Ask them to review again**: it asks exactly those reviewers on GitHub, after your click in the desk's bar, and
-the PR then waits on them.
+the PR then waits on them. Pushing the agent's fixes to your PR offers the same as a box under **Push to GitHub**
+(ticked): once the runner has pushed, those reviewers are asked again.
 
 An item in Your move can go to **Later** (the zz under its icon): it waits there, after Waiting on CI, until you
 do something with it (start the agent, post, merge, ...) or click its zz again. It's kept in

@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.4.0
+version: 1.5.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -340,6 +340,8 @@ actions:
       # For the confirm bar's words, so they're always there; the elf refuses them unless they're the draft's.
       kind: {one-of: [review, comment, push, issue, pr]}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      # A push to your PR: then ask these reviewers to review again (only ones its preview offered).
+      askAgain: {pattern: '[A-Za-z0-9-]{1,39}(,[A-Za-z0-9-]{1,39}){0,9}', max: 400, optional: true}
   close:
     label: Close an item on GitHub
     args: [--action=close]

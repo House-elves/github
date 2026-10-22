@@ -36,6 +36,9 @@ public class Draft {
     /** A push or PR that {@link Poster#post} handed to the runner, which {@link Poster#postDone} finishes. */
     public Pushing pushing;
 
+    /** A push's preview offered to ask these reviewers again once it's pushed (you pushed since their review). */
+    public java.util.List<String> askAgain;
+
     /** A preview's one-time confirmation, for the draft as it was then. */
     public record Confirm(String token, String payload, Instant expires) {
     }
@@ -45,6 +48,15 @@ public class Draft {
      *
      * @param asDraft a new PR opens as a draft (true) or ready for review
      */
-    public record Pushing(String from, String to, Instant at, boolean asDraft) {
+    /** @param askAgain reviewers to ask to review again once the runner pushed (empty: nobody) */
+    public record Pushing(String from, String to, Instant at, boolean asDraft, java.util.List<String> askAgain) {
+
+        public Pushing(String from, String to, Instant at, boolean asDraft) {
+            this(from, to, at, asDraft, java.util.List.of());
+        }
+
+        public Pushing {
+            askAgain = askAgain == null ? java.util.List.of() : java.util.List.copyOf(askAgain);
+        }
     }
 }

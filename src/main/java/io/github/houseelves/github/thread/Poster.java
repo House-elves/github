@@ -60,18 +60,31 @@ public class Poster {
      * @param target  in words, where this goes: "Review on quarkusio/quarkus#50087"
      * @param confirm pass this to {@link #post} to send it
      * @param warning something to know before sending it (a new PR: open PRs that already mention the issue)
+     * @param askAgain a push to your PR: the reviewers who reviewed before your latest commit, to ask again with it
      */
     public record Preview(long draftId, String target, String kind, AgentOutput.DraftOut draft, PushOut push, PrOut pr,
-            String url, String confirm, String warning) {
+            String url, String confirm, String warning, List<String> askAgain) {
 
         Preview(long draftId, String target, String kind, AgentOutput.DraftOut draft, PushOut push, String url,
                 String confirm) {
-            this(draftId, target, kind, draft, push, null, url, confirm, null);
+            this(draftId, target, kind, draft, push, null, url, confirm, null, List.of());
+        }
+
+        Preview(long draftId, String target, String kind, AgentOutput.DraftOut draft, PushOut push, PrOut pr,
+                String url, String confirm, String warning) {
+            this(draftId, target, kind, draft, push, pr, url, confirm, warning, List.of());
         }
     }
 
-    /** @param pushedTo the item whose PR branch was pushed to (CI starts again), or null for a review or comment */
-    public record Posted(String url, String pushedTo) {
+    /**
+     * @param pushedTo the item whose PR branch was pushed to (CI starts again), or null for a review or comment
+     * @param askAgain who to ask to review again now it's pushed (you ticked it with the push)
+     */
+    public record Posted(String url, String pushedTo, List<String> askAgain) {
+
+        public Posted(String url, String pushedTo) {
+            this(url, pushedTo, List.of());
+        }
     }
 
     /**
@@ -118,7 +131,9 @@ public class Poster {
                                 + push.base() + ". A force push, refused if the branch changed since."
                         : "Push " + push.commits().size() + (push.commits().size() == 1 ? " commit" : " commits")
                                 + " to " + push.headRepo() + ":" + push.headRef();
-                return new Preview(draftId, target, d.kind, null, push, t.url, token);
+                d.askAgain = askAgain(t.itemKey, githubToken, login);
+                store.save(d.threadId);
+                return new Preview(draftId, target, d.kind, null, push, null, t.url, token, null, d.askAgain);
             }
             if (d.kind.equals(Draft.PR)) {
                 PrOut pr = mapper.readValue(d.payload, PrOut.class);
@@ -134,6 +149,17 @@ public class Poster {
             return new Preview(draftId, target, d.kind, out, null, t.url, token);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Unreadable draft", e);
+        }
+    }
+
+    /** Your PR's reviewers who reviewed before your latest commit and aren't asked again yet; none when it can't tell. */
+    private List<String> askAgain(String itemKey, String githubToken, String login) {
+        if (githubToken == null || login == null) return List.of();
+        try {
+            GitHub.PrDetails d = github.prDetails(githubToken, List.of(itemKey), login).get(itemKey);
+            return d == null || d.feedback() == null ? List.of() : d.feedback().reReview();
+        } catch (RuntimeException e) {
+            return List.of();
         }
     }
 
@@ -155,7 +181,17 @@ public class Poster {
 
     /** @param asDraft for a PR draft: open it as a draft PR (true) or ready for review straight away (false) */
     public Result post(long draftId, String confirm, String login, boolean asDraft) {
+        return post(draftId, confirm, login, asDraft, List.of());
+    }
+
+    /** @param askAgain a push: then ask these reviewers to review again; only ones its preview offered */
+    public Result post(long draftId, String confirm, String login, boolean asDraft, List<String> askAgain) {
         Draft draft = pendingDraft(draftId);
+        List<String> ask = askAgain == null ? List.of() : askAgain;
+        if (!ask.isEmpty() && (!Draft.PUSH.equals(draft.kind) || draft.askAgain == null
+                || !ask.stream().allMatch(a -> draft.askAgain.stream().anyMatch(a::equalsIgnoreCase)))) {
+            throw new IllegalStateException("Only the reviewers the preview named can be asked again with this push");
+        }
         Draft.Confirm p = draft.confirm;
         draft.confirm = null; // one time only
         store.save(draft.threadId);
@@ -164,7 +200,7 @@ public class Poster {
             throw new IllegalStateException("Preview it again before posting: the draft changed or the preview expired");
         }
         DeskThread t = store.thread(draft.threadId);
-        if (draft.kind.equals(Draft.PUSH)) return new Result(null, push(draft, t, asDraft));
+        if (draft.kind.equals(Draft.PUSH)) return new Result(null, push(draft, t, asDraft, ask));
         if (draft.kind.equals(Draft.PR)) return new Result(null, openPr(draft, t, asDraft));
         AgentOutput.DraftOut out = read(draft.payload);
         if (draft.kind.equals(Draft.ISSUE)) return new Result(openIssue(draft, out, t, login), null);
@@ -351,6 +387,14 @@ public class Poster {
         live.changed(itemKey);
     }
 
+    /** A line in the item's thread from the desk (what happened), if it has a thread. */
+    public void note(String itemKey, String text) {
+        DeskThread t = store.byKey(itemKey);
+        if (t == null) return;
+        store.addTurn(t.id, Turn.SYSTEM, null, text);
+        live.changed(itemKey);
+    }
+
     /** Asks these people to review your PR again, as you; kept in the log of GitHub writes. */
     public void requestReviewers(String itemKey, List<String> logins, String login) {
         if (!itemKey.matches("[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\\d+")) {
@@ -508,7 +552,9 @@ public class Poster {
             }
             throw new IllegalStateException("The push didn't go through: " + why);
         }
-        return draft.kind.equals(Draft.PR) ? openedPr(draft, t, login, p.asDraft()) : pushed(draft, t, login);
+        if (draft.kind.equals(Draft.PR)) return openedPr(draft, t, login, p.asDraft());
+        Posted done = pushed(draft, t, login);
+        return new Posted(done.url(), done.pushedTo(), p.askAgain());
     }
 
     /** The fix is on your fork: opens the PR from it. */
@@ -589,9 +635,9 @@ public class Poster {
     }
 
     /** Hands the runner the commits to push to the PR's branch, if it's still at {@code from}. */
-    private Push push(Draft draft, DeskThread t, boolean asDraft) {
+    private Push push(Draft draft, DeskThread t, boolean asDraft, List<String> askAgain) {
         PushOut p = readPush(draft.payload);
-        draft.pushing = new Draft.Pushing(p.from(), p.to(), clock.instant(), asDraft);
+        draft.pushing = new Draft.Pushing(p.from(), p.to(), clock.instant(), asDraft, askAgain);
         store.save(t.id);
         return new Push(t.repo(), t.number(), p.headRepo(), p.headRef(), p.from(), p.to(), p.squashed(),
                 p.squashed() ? p.base() : null);

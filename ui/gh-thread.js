@@ -41,6 +41,7 @@ class GhThread extends LitElement {
         _editing: { state: true },
         _edit: { state: true },
         _preview: { state: true },
+        _keepReviewers: { state: true }, // a push's preview: don't ask its reviewers again (unticked), by draft id
         _posted: { state: true },
         _doing: { state: true },
         _confirmClose: { state: true },
@@ -185,7 +186,8 @@ class GhThread extends LitElement {
             .layout { grid-template-columns: minmax(0, 1fr); }
             aside { position: static; order: -1; }
         }
-    `];
+            .ask-again { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); cursor: pointer; }
+`];
 
     constructor() {
         super();
@@ -519,7 +521,8 @@ class GhThread extends LitElement {
         try {
             const p = this._preview;
             // kind and itemKey are for the desk's bar, so it always says what's posted where; the elf checks them.
-            const r = await post({ draftId: p.draftId, confirm: p.confirm, asDraft, kind: p.kind, itemKey: this.itemKey });
+            const askAgain = p.kind === 'push' && p.askAgain?.length && this._keepReviewers !== p.draftId ? p.askAgain.join(',') : null;
+            const r = await post({ draftId: p.draftId, confirm: p.confirm, asDraft, kind: p.kind, itemKey: this.itemKey, askAgain });
             this._posted = r.url;
             this._preview = null;
             this.dispatchEvent(new CustomEvent('thread-posted', { bubbles: true, composed: true, detail: { url: r.url } }));
@@ -1095,7 +1098,13 @@ class GhThread extends LitElement {
                     It only goes through if the branch is still where it was when this was made.`
                 : html`This pushes to the PR's branch under your GitHub account. It only goes through if the branch hasn't
                     moved since the agent started, and it never force-pushes.`;
-            buttons = html`<button class="primary" ?disabled=${this._busy} @click=${this._post}>${this._spin('post')}${sending ? 'Pushing' : 'Push to GitHub'}</button>`;
+            const who = p.askAgain ?? [];
+            const names = who.length === 1 ? who[0] : `${who.slice(0, -1).join(', ')} and ${who.at(-1)}`;
+            buttons = html`<button class="primary" ?disabled=${this._busy} @click=${this._post}>${this._spin('post')}${sending ? 'Pushing' : 'Push to GitHub'}</button>
+                ${who.length ? html`<label class="ask-again"><input type="checkbox" ?disabled=${this._busy}
+                    .checked=${this._keepReviewers !== p.draftId}
+                    @change=${e => { this._keepReviewers = e.target.checked ? null : p.draftId; }}>
+                    Then ask ${names} to review again</label>` : ''}`;
         } else if (p.kind === 'pr') {
             what = html`This syncs ${p.pr.headRepo}'s ${p.pr.base} with ${p.pr.repo}, pushes the commit to a new branch
                 ${p.pr.headRef} there (never a force push), and opens the PR on ${p.pr.base} under your name.`;

@@ -401,6 +401,33 @@ class ThreadFlowTest {
     }
 
     @Test
+    void aPushCanAskTheReviewersAgainOnceItsThere() throws Exception {
+        threads.start(KEY, Prompts.REVIEW, null, "phillip-kruger", "gho_t");
+        String head = "a".repeat(40), fixed = "b".repeat(40);
+        threads.jobDone(openJob(), "s", output("Committed.", "null"), null, mapper.readTree("""
+                {"from": "%s", "to": "%s", "commits": [{"sha": "%s", "subject": "x"}]}""".formatted(head, fixed, fixed)));
+        when(github.ci(anyString(), eq("quarkusio/quarkus"), eq(50087))).thenReturn(new GitHub.CiReport(head, "SUCCESS",
+                java.util.List.of(), java.util.List.of(), "someone/quarkus", "feature", true));
+        when(github.prDetails(anyString(), eq(java.util.List.of(KEY)), eq("phillip-kruger"))).thenReturn(java.util.Map.of(KEY,
+                new GitHub.PrDetails(null, false, null, null, new GitHub.Feedback("brunobat", null, "CHANGES_REQUESTED", false, 0,
+                        java.util.List.of("brunobat"), java.util.List.of()), false)));
+        when(writes.requestReviewers(anyString(), anyInt(), org.mockito.ArgumentMatchers.anyList())).thenReturn(mapper.createObjectNode());
+        long draftId = threads.view(KEY).draft().id();
+
+        Poster.Preview p = poster.preview(draftId, "gho_t", "phillip-kruger");
+        assertEquals(java.util.List.of("brunobat"), p.askAgain());
+        // Only who the preview named.
+        assertThrows(IllegalStateException.class, () -> again().poster.post(draftId, p.confirm(), "phillip-kruger", true,
+                java.util.List.of("someone-else")));
+        Poster.Preview p2 = poster.preview(draftId, "gho_t", "phillip-kruger");
+        again().poster.post(draftId, p2.confirm(), "phillip-kruger", true, java.util.List.of("brunobat"));
+        Poster.Posted posted = again().api.postDone(draftId, 200, null);
+        assertEquals(java.util.List.of("brunobat"), posted.askAgain());
+        org.mockito.Mockito.verify(writes).requestReviewers("quarkusio/quarkus", 50087, java.util.List.of("brunobat"));
+        assertTrue(again().threads.view(KEY).turns().stream().anyMatch(t -> t.text().equals("You asked brunobat to review again.")));
+    }
+
+    @Test
     void investigatingAnIssueListsTheOpenPrsAlreadyOnIt() {
         String issue = "quarkusio/quarkus#49877";
         when(github.context(any(), eq("quarkusio/quarkus"), eq(49877)))

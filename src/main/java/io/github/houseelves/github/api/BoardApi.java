@@ -156,8 +156,15 @@ public class BoardApi {
 
     /** As above, with what the confirm bar named ({kind} on {itemKey}), which must be the draft's. */
     public Poster.Result post(long draftId, String confirm, Boolean asDraft, String kind, String itemKey) {
+        return post(draftId, confirm, asDraft, kind, itemKey, null);
+    }
+
+    /** @param askAgain a push: also ask these reviewers (comma separated, ones its preview offered) to review again */
+    public Poster.Result post(long draftId, String confirm, Boolean asDraft, String kind, String itemKey, String askAgain) {
         poster.checkWords(draftId, kind, itemKey);
-        return post(draftId, confirm, asDraft);
+        List<String> ask = askAgain == null ? List.of()
+                : java.util.Arrays.stream(askAgain.split(",")).map(String::strip).filter(r -> !r.isEmpty()).toList();
+        return poster.post(draftId, confirm, login, asDraft == null || asDraft, ask);
     }
 
     /** The runner pushed (status 200) or didn't: finishes the post that handed it the push. */
@@ -167,6 +174,16 @@ public class BoardApi {
         if (posted.pushedTo() != null) {
             String to = posted.url().substring(posted.url().lastIndexOf('/') + 1);
             boards.markPushed(login, posted.pushedTo(), to);
+            if (!posted.askAgain().isEmpty()) {
+                // You ticked it with the push: now it's there, ask them. The push stands if GitHub refuses this.
+                try {
+                    poster.requestReviewers(posted.pushedTo(), posted.askAgain(), login);
+                    boards.markReviewRequested(login, posted.pushedTo(), posted.askAgain());
+                } catch (RuntimeException e) {
+                    poster.note(posted.pushedTo(), "Pushed, but asking " + String.join(", ", posted.askAgain())
+                            + " to review again failed: " + e.getMessage());
+                }
+            }
         }
         return posted;
     }
