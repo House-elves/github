@@ -28,7 +28,7 @@ const SECTIONS = [
     { id: 'watching', title: 'Just involved', fold: true },
 ];
 
-const ROLES = { mine: 'My PR', review: 'Review', issue: 'Issue', mvnpm: 'mvnpm', involved: 'Involved' };
+const ROLES = { mine: 'My PR', review: 'Review', issue: 'Issue', involved: 'Involved' };
 
 /** A row's tag. "Just involved" says how you're involved in its heading, so its rows say what they are. */
 function roleTag(item, role) {
@@ -87,15 +87,15 @@ const CALLS = {
 const PANEL_STEPS = new Set(['self-fix', 'ci-fix', 'ci-why', 'ci-rerun', 'ci-reopen', 'conflicts', 'address', 'fix', 'investigate', 'review']);
 
 /**
- * The GitHub board, by whose move it is. Every item is in a flow (your PR, a PR to review, an assigned issue, an
- * mvnpm bump); the desk works out its stage and next step (FlowClassifier), and the row shows that with one main
+ * The GitHub board, by whose move it is. Every item is in a flow (your PR, a PR to review, an assigned issue); the
+ * desk works out its stage and next step (FlowClassifier), and the row shows that with one main
  * button. A row opens in place to read what the agent made and send it, so you rarely leave the board.
  * Keys: j/k move between rows, Enter runs the main step, o opens or closes the row.
  */
 class GhBoard extends LitElement {
 
     static properties = {
-        /** The board's settings are open (what to watch, mvnpm, the runner). */
+        /** The board's settings are open (what to watch, the runner). */
         settingsOpen: { type: Boolean },
         _board: { state: true },
         _loading: { state: true },
@@ -113,7 +113,6 @@ class GhBoard extends LitElement {
         _mergeAnyway: { state: true },
         /** What the open row shows under it: thread (the agent), review (Read the review) or activity (What's new). */
         _panel: { state: true },
-        _mvnpmStarting: { state: true },
         _ignoring: { state: true },
         _unfolded: { state: true },
         _filter: { state: true },
@@ -278,7 +277,6 @@ class GhBoard extends LitElement {
         this._moreFor = null;
         this._mergeAnyway = null;
         this._panel = 'thread';
-        this._mvnpmStarting = null;
         this._ignoring = null;
         this._unfolded = new Set();
         this._filter = filter ?? { text: '', tags: new Set() };
@@ -372,7 +370,6 @@ class GhBoard extends LitElement {
 
     /** Runs a row's step. Agent steps leave the row showing the agent at work; nothing navigates. */
     async _run(item, next) {
-        if (next.id === 'mvnpm-check') return this._mvnpmRun(item);
         const call = CALLS[next.id];
         if (!call) {
             // The board came from a newer desk than this page: its steps include one this page doesn't know.
@@ -393,20 +390,6 @@ class GhBoard extends LitElement {
             if (!cancelled(e)) this._rowError = { key: item.key, text: `${next.label}: ${errorMessage(e)}` };
         } finally {
             this._doing = null;
-        }
-    }
-
-    /** Run mvnpm-dependabot now: every repo, or one PR (item). */
-    async _mvnpmRun(item) {
-        this._mvnpmStarting = item ? item.key : 'all';
-        this._error = null;
-        try {
-            await act('mvnpm-run', item ? { repo: item.repo, pr: item.number } : {});
-            await this._reloadNow(); // the row moves to "checking" with its new flow
-        } catch (e) {
-            if (!cancelled(e)) this._error = `Couldn't start the mvnpm check: ${errorMessage(e)}`;
-        } finally {
-            this._mvnpmStarting = null;
         }
     }
 
@@ -541,9 +524,9 @@ class GhBoard extends LitElement {
         `;
     }
 
-    /** Every item with its flow: the lanes, then the mvnpm bumps. */
+    /** Every item with its flow, from the lanes. */
     _rows(b) {
-        const items = [...b.lanes.flatMap(l => l.items), ...(b.mvnpm?.rows ?? []).map(r => r.item)];
+        const items = b.lanes.flatMap(l => l.items);
         return items.map(item => ({ item, flow: b.flows?.[item.key] })).filter(r => r.flow);
     }
 
@@ -599,7 +582,6 @@ class GhBoard extends LitElement {
         rows.forEach(r => (by[r.flow.waiting] ?? by.watching).push(r));
         // Most recent first: what just changed is what you're likely to act on.
         Object.values(by).forEach(list => list.sort((x, y) => (y.flow.since ?? '').localeCompare(x.flow.since ?? '')));
-        const checks = b.mvnpmChecks;
         return html`
             <div class="page-top board-top"><div class="hero">
                 <span class="date">${DATE.format(new Date())}</span>
@@ -611,16 +593,10 @@ class GhBoard extends LitElement {
                     <button class="sm" @click=${() => this._load(true)} ?disabled=${this._refreshing}>
                         ${this._refreshing ? spinner : ''}${this._refreshing ? 'Refreshing' : 'Refresh'}</button>
                     ${this._failed() ? html`<span class="chip bad" title=${this._failed()}>The last refresh failed</span>` : ''}
-                    ${b.mvnpm?.installed ? (checks?.running?.length
-                        ? html`<span class="chip run">${spinner}mvnpm checks running${checks.since ? html`, started ${ago(checks.since)}` : ''}</span>`
-                        : html`<button class="sm quiet" ?disabled=${this._mvnpmStarting != null || !b.runnerConnected}
-                            title="Run mvnpm-dependabot over ${b.mvnpm.repos.join(', ')} now" @click=${() => this._mvnpmRun(null)}>
-                            ${this._mvnpmStarting === 'all' ? spinner : ''}Run mvnpm checks</button>`) : ''}
                 </div>
             </div>${settingsToggle(this.settingsOpen, () => { this.settingsOpen = !this.settingsOpen; })}</div>
             ${this.settingsOpen ? html`<div class="settings-area">
-                <gh-settings embedded @mvnpm-changed=${() => this._load(true)}
-                    @board-search-changed=${() => this._load(true)}></gh-settings>
+                <gh-settings embedded @board-search-changed=${() => this._load(true)}></gh-settings>
                 ${this._renderElfSettings(b)}
             </div>` : ''}
 
@@ -658,8 +634,8 @@ class GhBoard extends LitElement {
 
     /**
      * The elf itself: the GitHub account it works as, and its own settings in the desk's dialog (its version, an
-     * update, when it refreshes on its own, removing it), so secrets never reach the tab. mvnpm-dependabot's settings
-     * are on the desk's + page (it has no tab), and the runner's at the bottom of that page.
+     * update, when it refreshes on its own, removing it), so secrets never reach the tab. The runner's settings are at
+     * the bottom of the desk's + page.
      */
     _renderElfSettings(b) {
         return html`<section class="elf-settings" aria-labelledby="account">
@@ -672,7 +648,7 @@ class GhBoard extends LitElement {
                 <span>Its version and updates, when it refreshes on its own, and removing it.</span>
                 <button class="sm" @click=${() => elf.settings(null, 'GitHub settings')}>Version and updates</button>
             </div>
-            <p class="small muted" style="margin:0">${b.mvnpm?.installed ? 'mvnpm-dependabot\'s settings are on the desk\'s + page. ' : ''}How
+            <p class="small muted" style="margin:0">How
                 the agents run (the runner's settings) is at the bottom of the + page.</p>
         </section>`;
     }
@@ -807,7 +783,7 @@ class GhBoard extends LitElement {
     /** One step as a button (or the control that runs it: merge, update branch). */
     _action(item, n, primary) {
         const cls = primary ? 'sm primary' : 'sm quiet';
-        const busy = this._doing === `${item.key} ${n.id}` || (n.id === 'mvnpm-check' && this._mvnpmStarting === item.key);
+        const busy = this._doing === `${item.key} ${n.id}`;
         switch (n.id) {
             case 'open': {
                 const open = this._open === item.key && this._panel === 'thread';
@@ -834,7 +810,7 @@ class GhBoard extends LitElement {
                 return html`<button class=${cls} ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, true)}>
                     ${this._ignoring === item.key ? spinner : ''}${n.label}</button>`;
             default:
-                return html`<button class=${cls} ?disabled=${this._doing !== null || this._mvnpmStarting != null}
+                return html`<button class=${cls} ?disabled=${this._doing !== null}
                     @click=${() => this._run(item, n)}>${busy ? spinner : ''}${n.label}</button>`;
         }
     }

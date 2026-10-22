@@ -28,9 +28,4 @@ public final class Items {
                 Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-10-05T00:00:00Z").plusSeconds(number),
                 2, null, null, null, null, null, null, null, null);
     }
-
-    public static Item mvnpmBump(String repo, int number, String sha) {
-        return pr(repo, number, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
-                "dependabot/maven/org.mvnpm-lit-3.3.3", sha);
-    }
 }

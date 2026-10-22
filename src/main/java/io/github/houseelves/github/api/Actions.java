@@ -89,7 +89,6 @@ public class Actions {
             case "remove" -> api.remove(p.path("id").asLong());
             case "add-always-involved" -> api.addAlwaysInvolved(text(p, "repo"));
             case "remove-always-involved" -> api.removeAlwaysInvolved(text(p, "repo"));
-            case "set-mvnpm-enabled" -> api.setMvnpmEnabled(p.path("on").asBoolean());
             case "set-refresh-minutes" -> api.setRefreshMinutes(p.path("minutes").asInt());
             case "seen" -> api.seen(key(p));
             case "post-done" -> api.postDone(p.path("draftId").asLong(), p.path("status").asInt(), p.path("error").asText(null));
@@ -129,8 +128,6 @@ public class Actions {
             }
             case "merge-on-green" -> api.mergeOnGreen(key(p), text(p, "method"), text(p, "headSha"));
             case "merge-without-approval" -> api.mergeWithoutApproval(key(p), text(p, "method"), text(p, "headSha"));
-            case "mvnpm-run" -> api.mvnpmRun(p.path("repo").isTextual() ? p.path("repo").asText() : null,
-                    p.path("pr").isIntegralNumber() ? p.path("pr").asInt() : null);
             default -> throw new IllegalArgumentException("Not one of the GitHub elf's actions: " + action);
         };
         JsonNode json = answer == null ? mapper.nullNode() : mapper.valueToTree(answer);

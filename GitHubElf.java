@@ -128,7 +128,7 @@ public class GitHubElf {
             sb.append("\n").append(lane.title()).append(" (").append(lane.items().size()).append(")\n");
             for (Item i : lane.items()) sb.append("  ").append(i.key()).append("  ").append(i.title()).append('\n');
         }
-        sb.append("\nmvnpm: ").append(b.mvnpm().rows().size()).append(", hidden: ").append(b.hidden().size())
+        sb.append("\nhidden: ").append(b.hidden().size())
                 .append(", ignored: ").append(b.ignored().size()).append(b.scopeEmpty() ? " (nothing watched yet)" : "")
                 .append("\n\nDry run: nothing was written.");
         System.out.println(sb);
@@ -142,7 +142,7 @@ public class GitHubElf {
             Import.Summary s = Import.run(home, db);
             Elf elf = new Elf(home, login, () -> {
                 throw new IllegalStateException("The import doesn't ask GitHub");
-            }, null, null, io.github.houseelves.github.mvnpm.MvnpmElf.onThisMachine(Json.MAPPER), null);
+            }, null, null);
             Views.writeAll(elf);
             System.out.println(s);
         }
@@ -150,7 +150,7 @@ public class GitHubElf {
     }
 
     private static int count(Board b) {
-        return b.lanes().stream().mapToInt(l -> l.items().size()).sum() + b.mvnpm().rows().size();
+        return b.lanes().stream().mapToInt(l -> l.items().size()).sum();
     }
 
     private static void print(JsonNode answer) throws Exception {

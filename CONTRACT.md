@@ -34,7 +34,7 @@ redesign it. Where the desk used its database, CDI, Quarkus REST client or the r
 ## Files (data folders the tab reads; all JSON, written whole then moved into place)
 
 - `board/board.json`: the board, the same JSON as the desk's `DeskApi.board()` returns today (`Board` with
-  `with(...)`, `mvnpmChecks(...)` and `withFlows(now)` applied). `runnerConnected` is always true. Also the cache it's
+  `with(...)` and `withFlows(now)` applied). `runnerConnected` is always true. Also the cache it's
   built from (`board/cache.json`: what `BoardService` keeps in memory now), so actions can rebuild `board.json` from
   local state without asking GitHub.
 - `threads/<key>.json`, one per item that has a thread, `<key>` being the item key with every character outside
@@ -67,7 +67,7 @@ Reads (`ask: false`): `item`, `about`, `thread`, `pr-diff`, `pr-activity`, `pr-r
 `is-ignored`.
 
 Local changes (`ask: false`): `update-draft`, `discard-draft`, `ignore`, `unignore`, `cancel-merge`,
-`watch`, `watch-all`, `exclude`, `remove`, `add-always-involved`, `remove-always-involved`, `set-mvnpm-enabled`,
+`watch`, `watch-all`, `exclude`, `remove`, `add-always-involved`, `remove-always-involved`,
 `set-refresh-minutes`, `seen` (the thread page was looked at), and the agent starts below.
 
 Agent starts (`ask: false`; they write nothing to GitHub): `start` (with `action` and `question`), `fix-review`,
@@ -76,8 +76,8 @@ answers with `{"cancelAgent": id}` and the tab calls `elf.cancelAgent(id)`; the 
 
 GitHub writes (`ask: true`, with a `confirm` text naming what happens, e.g. `Post this {kind} on {item}?`): `post`
 (review, comment, issue, push, pr: as `Poster.post`), `close`, `ci-reopen`, `ready-for-review`, `assign-me`, `ci-rerun`,
-`ci-approve`, `ask-dependabot-to-rebase`, `update-branch`, `squash`, `merge-on-green`, `merge-without-approval`,
-`mvnpm-run`. The desk's rule stays: nothing is written to GitHub without the person's click, and that click is the
+`ci-approve`, `ask-dependabot-to-rebase`, `update-branch`, `squash`, `merge-on-green`, `merge-without-approval`.
+The desk's rule stays: nothing is written to GitHub without the person's click, and that click is the
 desk's confirm bar for these actions.
 
 - Pushing an agent's commits: the elf never runs git in the runner's worktrees. It answers with
@@ -110,14 +110,13 @@ desk's confirm bar for these actions.
 ## Settings (elf.yaml `settings`)
 
 `GITHUB_ACCOUNT` (login, needed). The board's own settings stay where they are in the desk's UI (the board's
-Settings panel: scope, always involved, mvnpm on/off, refresh minutes) and live in `state/settings.json` and
+Settings panel: scope, always involved, refresh minutes) and live in `state/settings.json` and
 `state/scope.json`, not in the config file.
 
 ## mvnpm
 
-The mvnpm lane reads `mvnpm-dependabot`'s state as the desk does now (`MvnpmElf`), and `mvnpm-run` starts a check the
-way the runner's `mvnpm.run` does today (`systemd-run --user ...` of mvnpm-dependabot, Linux only), done by this elf
-directly.
+Not here. mvnpm-dependabot has its own tab (since 1.1.0 of this elf): the GitHub elf has no mvnpm lane, reads
+nothing of that elf's, and Dependabot's mvnpm bumps show like any other PR.
 
 ## Moving the person's data in (`import`, a command, not in elf.yaml)
 

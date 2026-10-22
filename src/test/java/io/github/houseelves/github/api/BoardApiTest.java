@@ -1,7 +1,6 @@
 package io.github.houseelves.github.api;
 
 import static io.github.houseelves.github.Items.issue;
-import static io.github.houseelves.github.Items.mvnpmBump;
 import static io.github.houseelves.github.Items.pr;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,10 +47,6 @@ class BoardApiTest {
                 new GitHub.SearchResult(List.of(pr("smallrye/smallrye-open-api", 1, "someone")), 1));
         when(github.search(eq("gho_test"), contains("reviewed-by:@me"), anyInt())).thenReturn(
                 new GitHub.SearchResult(List.of(), 0));
-        // The mvnpm search names the elf's repos from the test config.
-        when(github.search(eq("gho_test"),
-                eq("is:open is:pr author:app/dependabot sort:created-desc repo:quarkusio/quarkus repo:smallrye/smallrye-open-api"),
-                anyInt())).thenReturn(new GitHub.SearchResult(List.of(mvnpmBump("smallrye/smallrye-open-api", 2696, "abc")), 1));
         when(github.viewerOrgs("gho_test")).thenReturn(List.of("quarkusio", "smallrye", "eclipse"));
     }
 
@@ -71,7 +66,6 @@ class BoardApiTest {
         assertTrue(before.scopeEmpty());
         assertTrue(before.runnerConnected());
         assertEquals(4, before.hidden().size());
-        assertEquals("SAFE", before.mvnpm().rows().get(0).check().verdict()); // from the test state.json
 
         List<BoardService.Suggestion> sug = again().suggestions();
         assertEquals("quarkusio", sug.get(0).owner());
@@ -106,16 +100,11 @@ class BoardApiTest {
         var s = api.watch("quarkusio");
         s = again().exclude("quarkusio/quarkus-quickstarts");
         assertEquals(2, s.scope().size());
-        assertTrue(s.mvnpmInstalled());
-        assertEquals(List.of("quarkusio/quarkus", "smallrye/smallrye-open-api"), s.mvnpmRepos());
         assertEquals("phillip-kruger", s.login());
 
         s = again().setRefreshMinutes(10);
         assertEquals(10, s.refreshMinutes());
         assertEquals(10, again().settings().refreshMinutes());
         assertThrows(IllegalArgumentException.class, () -> api.setRefreshMinutes(0));
-
-        s = again().setMvnpmEnabled(false);
-        assertFalse(again().settings().mvnpmEnabled());
     }
 }

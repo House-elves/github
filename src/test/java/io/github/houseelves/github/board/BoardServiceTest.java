@@ -29,13 +29,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.github.houseelves.github.github.GitHub;
 import io.github.houseelves.github.github.Item;
 import io.github.houseelves.github.ignore.IgnoreService;
 import io.github.houseelves.github.Items;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
 import io.github.houseelves.github.elf.Live;
 import io.github.houseelves.github.scope.Scope;
 import io.github.houseelves.github.scope.ScopeService;
@@ -47,7 +44,6 @@ class BoardServiceTest {
     Path dir;
 
     GitHub github = mock(GitHub.class);
-    MvnpmElf mvnpm = mock(MvnpmElf.class);
     ScopeService scopes = mock(ScopeService.class);
     Settings settings = mock(Settings.class);
     Live live = mock(Live.class);
@@ -63,21 +59,18 @@ class BoardServiceTest {
     @BeforeEach
     void setUp() {
         when(scopes.scope()).thenReturn(new Scope(Set.of("quarkusio"), Set.of(), Set.of()));
-        when(mvnpm.repos()).thenReturn(List.of());
-        when(mvnpm.state()).thenReturn(new ObjectMapper().createObjectNode());
         when(settings.refreshMinutes()).thenReturn(5);
-        when(settings.mvnpmEnabled()).thenReturn(true);
         when(github.search(anyString(), contains("review-requested"), anyInt()))
                 .thenReturn(new GitHub.SearchResult(List.of(), 0));
         when(github.search(anyString(), contains("reviewed-by"), anyInt()))
                 .thenReturn(new GitHub.SearchResult(List.of(), 0));
         when(ignores.keys()).thenReturn(Set.of());
-        service = new BoardService(github, mvnpm, scopes, settings, live, ignores, dir, clock);
+        service = new BoardService(github, scopes, settings, live, ignores, dir, clock);
     }
 
     /** The next run of the elf: it reads board/cache.json. */
     BoardService again() {
-        return new BoardService(github, mvnpm, scopes, settings, live, ignores, dir, clock);
+        return new BoardService(github, scopes, settings, live, ignores, dir, clock);
     }
 
     void involvedReturns(Item... items) {
@@ -133,15 +126,11 @@ class BoardServiceTest {
     }
 
     @Test
-    void mvnpmTurnedOffHasNoLaneAndNoSearchOfItsOwn() {
-        when(mvnpm.repos()).thenReturn(List.of("quarkusio/quarkus"));
-        when(mvnpm.installed()).thenReturn(true);
-        when(settings.mvnpmEnabled()).thenReturn(false);
-        involvedReturns(Items.mvnpmBump("quarkusio/quarkus", 9, "abc"));
+    void aDependabotMvnpmBumpIsAPrLikeAnyOtherWithNoSearchOfItsOwn() {
+        involvedReturns(Items.pr("quarkusio/quarkus", 9, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
+                "dependabot/maven/org.mvnpm-lit-3.3.3", "abc"));
         Board b = service.board("me", "t", false);
-        assertFalse(b.mvnpm().installed());
-        assertTrue(b.mvnpm().rows().isEmpty());
-        assertEquals(List.of("quarkusio/quarkus#9"), keys(b)); // the bump shows like any other PR
+        assertEquals(List.of("quarkusio/quarkus#9"), keys(b));
         verify(github, never()).search(anyString(), contains("author:app/dependabot"), anyInt());
     }
 

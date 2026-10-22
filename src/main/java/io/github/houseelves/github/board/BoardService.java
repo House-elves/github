@@ -31,7 +31,6 @@ import io.github.houseelves.github.elf.Log;
 import io.github.houseelves.github.github.GitHub;
 import io.github.houseelves.github.github.Item;
 import io.github.houseelves.github.ignore.IgnoreService;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
 import io.github.houseelves.github.scope.Scope;
 import io.github.houseelves.github.scope.ScopeService;
 import io.github.houseelves.github.settings.Settings;
@@ -55,10 +54,8 @@ public class BoardService {
     static final Duration FIRST_LOAD_WAIT = Duration.ofSeconds(90);
     static final int MAX_INVOLVED = GitHub.SEARCH_CAP;
     static final int MAX_REVIEW = 300;
-    static final int MAX_MVNPM = 300;
 
     private final GitHub github;
-    private final MvnpmElf mvnpm;
     private final ScopeService scopes;
     private final Settings settings;
     private final Live live;
@@ -88,15 +85,14 @@ public class BoardService {
             Map<String, List<GitHub.LinkedPr>> linkedPrs) {
     }
 
-    public BoardService(GitHub github, MvnpmElf mvnpm, ScopeService scopes, Settings settings, Live live,
+    public BoardService(GitHub github, ScopeService scopes, Settings settings, Live live,
             IgnoreService ignores, Path boardDir) {
-        this(github, mvnpm, scopes, settings, live, ignores, boardDir, Clock.systemUTC());
+        this(github, scopes, settings, live, ignores, boardDir, Clock.systemUTC());
     }
 
-    BoardService(GitHub github, MvnpmElf mvnpm, ScopeService scopes, Settings settings, Live live,
+    BoardService(GitHub github, ScopeService scopes, Settings settings, Live live,
             IgnoreService ignores, Path boardDir, Clock clock) {
         this.github = github;
-        this.mvnpm = mvnpm;
         this.scopes = scopes;
         this.settings = settings;
         this.live = live;
@@ -159,10 +155,7 @@ public class BoardService {
 
     private Board classify(BoardClassifier.Fetched fetched, boolean refreshing) {
         String login = fetched.login();
-        boolean mvnpmOn = settings.mvnpmEnabled();
-        return BoardClassifier.classify(fetched, scopes.scope(), mvnpmOn ? mvnpm.repos() : List.of(),
-                mvnpmOn && mvnpm.installed(), mvnpm.state(),
-                settings.refreshMinutes(), ignores.keys()).refreshing(refreshing).returned(ignores.recentlyReturned())
+        return BoardClassifier.classify(fetched, scopes.scope(), settings.refreshMinutes(), ignores.keys()).refreshing(refreshing).returned(ignores.recentlyReturned())
                 .sinceReview(sinceReview.getOrDefault(login, Map.of()))
                 .reviewedAt(reviewedAt.getOrDefault(login, Map.of()))
                 .feedback(feedback.getOrDefault(login, Map.of()))
@@ -173,7 +166,7 @@ public class BoardService {
     /**
      * An owner (org or user) you could watch.
      *
-     * @param items     open items involving you in that owner's repos (mvnpm bumps not counted)
+     * @param items     open items involving you in that owner's repos
      * @param member    you belong to this org
      * @param preselect ticked on the first-run screen: an org you belong to that has items
      */
@@ -197,7 +190,7 @@ public class BoardService {
         items.addAll(f.reviewedByMe());
         items.addAll(f.involved());
         for (Item i : items) {
-            if (!seen.add(i.key()) || MvnpmElf.isMvnpmBump(i) || scope.covers(i.repo())) continue;
+            if (!seen.add(i.key()) || scope.covers(i.repo())) continue;
             String owner = i.owner().toLowerCase(Locale.ROOT);
             counts.merge(owner, 1, Integer::sum);
             display.putIfAbsent(owner, i.owner());
@@ -222,7 +215,7 @@ public class BoardService {
         load();
         cache.computeIfPresent(login, (l, f) -> new BoardClassifier.Fetched(f.login(), f.at(),
                 without(f.involved(), itemKey), without(f.reviewRequested(), itemKey),
-                without(f.reviewedByMe(), itemKey), without(f.mvnpmCandidates(), itemKey), f.truncated()));
+                without(f.reviewedByMe(), itemKey), f.truncated()));
         save(login);
         live.boardUpdated();
     }
@@ -235,7 +228,7 @@ public class BoardService {
     public void markRebasing(String login, String itemKey) {
         load();
         BoardClassifier.Fetched f = cache.get(login);
-        String sha = f == null ? null : java.util.stream.Stream.of(f.involved(), f.reviewRequested(), f.reviewedByMe(), f.mvnpmCandidates())
+        String sha = f == null ? null : java.util.stream.Stream.of(f.involved(), f.reviewRequested(), f.reviewedByMe())
                 .flatMap(List::stream).filter(i -> i.key().equals(itemKey)).map(Item::headSha).filter(Objects::nonNull)
                 .findFirst().orElse(null);
         if (sha == null) return;
@@ -248,7 +241,7 @@ public class BoardService {
         load();
         cache.computeIfPresent(login, (l, f) -> new BoardClassifier.Fetched(f.login(), f.at(),
                 withCi(f.involved(), itemKey, ci), withCi(f.reviewRequested(), itemKey, ci),
-                withCi(f.reviewedByMe(), itemKey, ci), withCi(f.mvnpmCandidates(), itemKey, ci), f.truncated()));
+                withCi(f.reviewedByMe(), itemKey, ci), f.truncated()));
         save(login);
         live.boardUpdated();
     }
@@ -258,7 +251,7 @@ public class BoardService {
         load();
         cache.computeIfPresent(login, (l, f) -> new BoardClassifier.Fetched(f.login(), f.at(),
                 withHead(f.involved(), itemKey, headSha), withHead(f.reviewRequested(), itemKey, headSha),
-                withHead(f.reviewedByMe(), itemKey, headSha), withHead(f.mvnpmCandidates(), itemKey, headSha), f.truncated()));
+                withHead(f.reviewedByMe(), itemKey, headSha), f.truncated()));
         markCi(login, itemKey, "PENDING");
     }
 
@@ -284,11 +277,9 @@ public class BoardService {
         BoardClassifier.Fetched before = cache.get(login);
         cache.computeIfPresent(login, (l, f) -> item == null
                 ? new BoardClassifier.Fetched(f.login(), f.at(), without(f.involved(), itemKey),
-                        without(f.reviewRequested(), itemKey), without(f.reviewedByMe(), itemKey),
-                        without(f.mvnpmCandidates(), itemKey), f.truncated())
+                        without(f.reviewRequested(), itemKey), without(f.reviewedByMe(), itemKey), f.truncated())
                 : new BoardClassifier.Fetched(f.login(), f.at(), replaced(f.involved(), item),
-                        replaced(f.reviewRequested(), item), replaced(f.reviewedByMe(), item),
-                        replaced(f.mvnpmCandidates(), item), f.truncated()));
+                        replaced(f.reviewRequested(), item), replaced(f.reviewedByMe(), item), f.truncated()));
         if (cache.get(login) != before) {
             save(login);
             live.boardUpdated();
@@ -305,8 +296,7 @@ public class BoardService {
         load();
         cache.computeIfPresent(login, (l, f) -> new BoardClassifier.Fetched(f.login(), f.at(),
                 withAssignee(f.involved(), itemKey, login), withAssignee(f.reviewRequested(), itemKey, login),
-                withAssignee(f.reviewedByMe(), itemKey, login), withAssignee(f.mvnpmCandidates(), itemKey, login),
-                f.truncated()));
+                withAssignee(f.reviewedByMe(), itemKey, login), f.truncated()));
         save(login);
         live.boardUpdated();
     }
@@ -346,8 +336,6 @@ public class BoardService {
      */
     private BoardClassifier.Fetched fetchNow(String login, String token, boolean bringBack) {
         Instant now = clock.instant();
-        // Turned off in the settings, the mvnpm lane goes: its bumps show like any other PR.
-        List<String> elfRepos = settings.mvnpmEnabled() ? mvnpm.repos() : List.of();
         var involved = async(() -> github.search(token, "is:open involves:@me archived:false sort:updated-desc",
                 MAX_INVOLVED));
         var review = async(() -> github.search(token,
@@ -358,12 +346,6 @@ public class BoardService {
         // Repos you maintain: every open PR and issue, whether GitHub counts you as involved or not.
         List<String> maintainedRepos = settings.alwaysInvolved();
         var maintained = async(() -> maintained(token, maintainedRepos));
-        var mvnpmCandidates = async(() -> {
-            if (elfRepos.isEmpty()) return List.<Item>of();
-            StringBuilder q = new StringBuilder("is:open is:pr author:app/dependabot sort:created-desc");
-            elfRepos.forEach(r -> q.append(" repo:").append(r));
-            return github.search(token, q.toString(), MAX_MVNPM).items();
-        });
         // Ignored items come back when someone requests your review or mentions you after you ignored them.
         try {
             Map<String, String> back = github.activityForMe(token, login, ignores.ignoredSince());
@@ -374,7 +356,6 @@ public class BoardService {
         GitHub.SearchResult inv = await(involved);
         GitHub.SearchResult rev = await(review);
         GitHub.SearchResult done = await(reviewed);
-        List<Item> mvnpmItems = await(mvnpmCandidates);
         GitHub.SearchResult own = await(maintained);
         boolean truncated = inv.truncated() || rev.truncated() || done.truncated() || own.truncated();
         // Their PRs count as review requests, the rest as involved.
@@ -388,14 +369,14 @@ public class BoardService {
         var links = async(() -> github.linkedPrs(token, issueKeys));
         Map<String, GitHub.PrDetails> details = Map.of();
         try {
-            details = prDetails(token, login, inv.items(), rev.items(), done.items(), mvnpmItems);
+            details = prDetails(token, login, inv.items(), rev.items(), done.items());
         } catch (Exception e) {
             LOG.warnf("Reading PR merge states failed: %s", e.getMessage());
         }
         if (!bringBack) {
             // A dry run: what it found is shown, not kept.
             return new BoardClassifier.Fetched(login, now, enrich(inv.items(), details), enrich(rev.items(), details),
-                    enrich(done.items(), details), enrich(mvnpmItems, details), truncated);
+                    enrich(done.items(), details), truncated);
         }
         sinceReview.put(login, sinceYourReview(login, details, inv.items(), rev.items(), done.items()));
         Map<String, Instant> reviewTimes = new HashMap<>();
@@ -412,7 +393,7 @@ public class BoardService {
         Map<String, Board.Rebase> asked = rebasing.get(login);
         if (asked != null) {
             Map<String, String> heads = new HashMap<>();
-            java.util.stream.Stream.of(inv.items(), rev.items(), done.items(), mvnpmItems).flatMap(List::stream)
+            java.util.stream.Stream.of(inv.items(), rev.items(), done.items()).flatMap(List::stream)
                     .filter(i -> i.headSha() != null).forEach(i -> heads.putIfAbsent(i.key(), i.headSha()));
             asked.entrySet().removeIf(e -> !e.getValue().sha().equals(heads.get(e.getKey())));
         }
@@ -422,8 +403,7 @@ public class BoardService {
             LOG.warnf("Looking for PRs linked to issues failed: %s", e.getMessage());
         }
         return new BoardClassifier.Fetched(login, now, enrich(inv.items(), details), enrich(rev.items(), details),
-                enrich(done.items(), details), enrich(mvnpmItems, details),
-                truncated);
+                enrich(done.items(), details), truncated);
     }
 
     /** GitHub's search query is at most 256 characters, so a long list of repos goes in several searches. */

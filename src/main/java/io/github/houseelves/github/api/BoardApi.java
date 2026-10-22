@@ -13,8 +13,6 @@ import io.github.houseelves.github.github.GitHub;
 import io.github.houseelves.github.github.Item;
 import io.github.houseelves.github.ignore.IgnoreService;
 import io.github.houseelves.github.merge.MergeService;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
-import io.github.houseelves.github.mvnpm.MvnpmRuns;
 import io.github.houseelves.github.scope.ScopeService;
 import io.github.houseelves.github.settings.Settings;
 import io.github.houseelves.github.thread.Poster;
@@ -34,8 +32,6 @@ public class BoardApi {
     final BoardService boards;
     final ScopeService scopes;
     final Settings settings;
-    final MvnpmElf mvnpm;
-    final MvnpmRuns mvnpmRuns;
     final ThreadService threads;
     final Poster poster;
     final MergeService merges;
@@ -46,15 +42,13 @@ public class BoardApi {
     final Live live;
 
     public BoardApi(String login, Supplier<String> token, BoardService boards, ScopeService scopes, Settings settings,
-            MvnpmElf mvnpm, MvnpmRuns mvnpmRuns, ThreadService threads, Poster poster, MergeService merges, CiService ci,
+            ThreadService threads, Poster poster, MergeService merges, CiService ci,
             GitHub github, ConflictService conflicts, IgnoreService ignores, Live live) {
         this.login = login;
         this.token = token;
         this.boards = boards;
         this.scopes = scopes;
         this.settings = settings;
-        this.mvnpm = mvnpm;
-        this.mvnpmRuns = mvnpmRuns;
         this.threads = threads;
         this.poster = poster;
         this.merges = merges;
@@ -75,7 +69,6 @@ public class BoardApi {
     public Board board(boolean refresh) {
         return boards.board(login, refresh || !boards.cached(login) ? token() : null, refresh)
                 .with(threads.summaries(), merges.recent(), true)
-                .mvnpmChecks(mvnpmRuns.state())
                 .withFlows(java.time.Instant.now());
     }
 
@@ -200,15 +193,6 @@ public class BoardApi {
         poster.assign(itemKey, login);
         boards.markAssigned(login, itemKey);
         return true;
-    }
-
-    // ---- mvnpm-dependabot ----
-
-    /** Run mvnpm-dependabot now: every repo (repo and pr null), or one PR (re-checked even if already checked). */
-    public MvnpmRuns.State mvnpmRun(String repo, Integer pr) {
-        if (!settings.mvnpmEnabled()) throw new IllegalStateException("mvnpm is turned off in the GitHub settings.");
-        mvnpmRuns.run(repo, pr);
-        return mvnpmRuns.state();
     }
 
     // ---- what's new ----
@@ -381,8 +365,7 @@ public class BoardApi {
     }
 
     /** @param alwaysInvolved repos you maintain: every open PR and issue in them is on the board */
-    public record SettingsView(String login, List<ScopeRow> scope, boolean mvnpmInstalled, List<String> mvnpmRepos,
-            int refreshMinutes, boolean mvnpmEnabled, List<String> alwaysInvolved) {
+    public record SettingsView(String login, List<ScopeRow> scope, int refreshMinutes, List<String> alwaysInvolved) {
     }
 
     /** What state/settings-view.json has. */
@@ -390,8 +373,7 @@ public class BoardApi {
         List<ScopeRow> rows = scopes.rows().stream()
                 .map(w -> new ScopeRow(w.id, w.kind.name(), w.name, w.mode.name()))
                 .toList();
-        return new SettingsView(login, rows, mvnpm.installed(), mvnpm.repos(), settings.refreshMinutes(),
-                settings.mvnpmEnabled(), settings.alwaysInvolved());
+        return new SettingsView(login, rows, settings.refreshMinutes(), settings.alwaysInvolved());
     }
 
     /** A repo you maintain: its open PRs come to "Needs my review" and its issues to the board, involved or not. */
@@ -439,12 +421,6 @@ public class BoardApi {
 
     public SettingsView remove(long id) {
         scopes.remove(id);
-        return changed();
-    }
-
-    /** The mvnpm lane and checks on or off (for desks without mvnpm-dependabot work). */
-    public SettingsView setMvnpmEnabled(boolean on) {
-        settings.setMvnpmEnabled(on);
         return changed();
     }
 

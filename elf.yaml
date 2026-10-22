@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.0.0
+version: 1.1.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -11,13 +11,11 @@ tools: [gh, git, claude]
 
 reads:
   - The open issues and PRs you're involved in on GitHub, with their CI, reviews and merge state, as your gh account.
-  - What mvnpm-dependabot recorded about its PRs, if it's set up on this machine.
   - The runner's reports on the agents this elf starts.
 writes:
   - The board, its threads and its settings, in ~/.config/github/.
   - On GitHub, only when you click and confirm it in the desk's bar, as your gh account - reviews, comments, new issues and PRs, closing and assigning, merges pinned to the head you saw, CI re-runs and approvals, branch updates.
   - Pushes the agent's commits (through the runner) when you confirm the push.
-  - Starts mvnpm-dependabot checks when you ask for one.
 
 settings:
   - key: GITHUB_ACCOUNT
@@ -218,12 +216,6 @@ actions:
     ask: false
     params:
       repo: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/?\s*', max: 300}
-  set-mvnpm-enabled:
-    label: Turn the mvnpm lane on or off
-    args: [--action=set-mvnpm-enabled]
-    ask: false
-    params:
-      on: {kind: bool}
   set-refresh-minutes:
     label: Set how often the board refreshes
     args: [--action=set-refresh-minutes]
@@ -399,10 +391,3 @@ actions:
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       method: {one-of: [merge, squash, rebase]}
       headSha: {pattern: '[0-9a-f]{40}', max: 40}
-  mvnpm-run:
-    label: Run an mvnpm-dependabot check
-    args: [--action=mvnpm-run]
-    confirm: "Run mvnpm-dependabot now? It comments on and approves the PRs it finds safe."
-    params:
-      repo: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+', max: 200, optional: true}
-      pr: {kind: int, optional: true}

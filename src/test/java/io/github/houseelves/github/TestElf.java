@@ -14,12 +14,10 @@ import io.github.houseelves.github.elf.Home;
 import io.github.houseelves.github.elf.Json;
 import io.github.houseelves.github.github.GitHub;
 import io.github.houseelves.github.github.GitHubWriter;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
 
 /**
  * The elf in a temp directory, with a fake GitHub (what the desk's tests mocked with @InjectMock): GitHub's reads
- * and writes are Mockito mocks, mvnpm-dependabot is the test copy of its config and state, and systemd answers
- * nothing.
+ * and writes are Mockito mocks.
  */
 public final class TestElf {
 
@@ -33,9 +31,7 @@ public final class TestElf {
     }
 
     public static Elf create(Path dir, GitHub github, GitHubWriter writer) {
-        MvnpmElf mvnpm = new MvnpmElf(Path.of("src/test/resources/mvnpm/config"), Path.of("src/test/resources/mvnpm"),
-                Json.MAPPER);
-        return new Elf(new Home(dir), LOGIN, () -> "gho_test", github, writer, mvnpm, cmd -> "");
+        return new Elf(new Home(dir), LOGIN, () -> "gho_test", github, writer);
     }
 
     /** Every job, oldest first: what the desk's tests read from the job table. */

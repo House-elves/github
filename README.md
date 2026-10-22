@@ -21,14 +21,13 @@ The runner runs it with jbang (`GitHubElf.java`). It needs `gh`, `git` and `clau
 |------------------|----------------------------------------------------------------------------------------|
 | `GITHUB_ACCOUNT` | The `gh` account the elf works as. Its token is `gh auth token -u <account>`, read fresh for each run, never written anywhere or logged. |
 
-The board's own settings (what it watches, the repos you maintain, mvnpm on or off, refresh minutes) stay in the
+The board's own settings (what it watches, the repos you maintain, refresh minutes) stay in the
 tab's Settings panel, as they were in the desk. They're kept in `state/`, not in the config file.
 
 ## What it reads and writes
 
 It reads, as your `gh` account: the open issues and PRs you're involved in, with their CI, reviews and merge
-state. It also reads what mvnpm-dependabot recorded (`~/.config/mvnpm-dependabot/config` and
-`~/.local/state/mvnpm-dependabot/state.json`), if that elf is set up, and the runner's reports on its agents.
+state, and the runner's reports on its agents.
 
 It writes its files in `~/.config/github/` (each written whole, then moved into place):
 
@@ -42,8 +41,8 @@ It writes its files in `~/.config/github/` (each written whole, then moved into 
 
 On GitHub it writes only what you click and confirm in the desk's bar: reviews, comments, new issues and PRs
 (from your fork), closing an item, assigning yourself, marking your PR ready, merges pinned to the head you saw
-(merge on green waits for CI and checks again on each refresh), re-running and approving CI, updating a branch,
-and running mvnpm-dependabot. An agent's commits are pushed by the runner, from its worktree, when you confirm
+(merge on green waits for CI and checks again on each refresh), re-running and approving CI, and updating a branch.
+An agent's commits are pushed by the runner, from its worktree, when you confirm
 the push. Every write is in `state/actions.json`. The elf refuses any other write itself, with the same
 allowlist the runner kept for the desk.
 

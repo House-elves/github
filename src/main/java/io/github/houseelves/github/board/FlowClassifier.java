@@ -20,8 +20,7 @@ import io.github.houseelves.github.thread.ThreadView;
  * <ol>
  * <li>a merge the desk runs: merged (done), waiting for green (CI), or stopped (you);</li>
  * <li>the agent: working (agent), or a draft, a new answer or a failed run to look at (you);</li>
- * <li>otherwise GitHub's state, by flow: your PR, a PR to review, an assigned issue, an mvnpm bump, or just
- * involved.</li>
+ * <li>otherwise GitHub's state, by flow: your PR, a PR to review, an assigned issue, or just involved.</li>
  * </ol>
  */
 public final class FlowClassifier {
@@ -29,7 +28,6 @@ public final class FlowClassifier {
     static final List<String> MINE_STEPS = List.of("Self-review", "CI", "Reviews", "Merge");
     static final List<String> REVIEW_STEPS = List.of("Review", "Author", "CI", "Merge");
     static final List<String> ISSUE_STEPS = List.of("Investigate", "Fix", "PR");
-    static final List<String> MVNPM_STEPS = List.of("Check", "Merge");
 
     private static final Pattern DEPENDABOT = Pattern.compile("^(app/)?dependabot(\\[bot])?$");
 
@@ -38,39 +36,31 @@ public final class FlowClassifier {
 
     /** Everything the rules look at, for one item. */
     record Ctx(String login, ThreadView.Summary thread, MergeService.View merge, String sinceReview, Instant reviewedAt,
-            List<GitHub.LinkedPr> links, Board.MvnpmRow mvnpm, boolean mvnpmChecking, Instant now,
-            GitHub.Feedback feedback, Instant rebaseAsked) {
+            List<GitHub.LinkedPr> links, Instant now, GitHub.Feedback feedback, Instant rebaseAsked) {
 
         Ctx(String login, ThreadView.Summary thread, MergeService.View merge, String sinceReview, Instant reviewedAt,
-                List<GitHub.LinkedPr> links, Board.MvnpmRow mvnpm, boolean mvnpmChecking, Instant now) {
-            this(login, thread, merge, sinceReview, reviewedAt, links, mvnpm, mvnpmChecking, now, null, null);
+                List<GitHub.LinkedPr> links, Instant now) {
+            this(login, thread, merge, sinceReview, reviewedAt, links, now, null, null);
         }
 
         Ctx(String login, ThreadView.Summary thread, MergeService.View merge, String sinceReview, Instant reviewedAt,
-                List<GitHub.LinkedPr> links, Board.MvnpmRow mvnpm, boolean mvnpmChecking, Instant now,
-                GitHub.Feedback feedback) {
-            this(login, thread, merge, sinceReview, reviewedAt, links, mvnpm, mvnpmChecking, now, feedback, null);
+                List<GitHub.LinkedPr> links, Instant now, GitHub.Feedback feedback) {
+            this(login, thread, merge, sinceReview, reviewedAt, links, now, feedback, null);
         }
     }
 
     public static Map<String, Flow> flows(Board b, Instant now) {
         Map<String, Flow> out = new LinkedHashMap<>();
         for (Board.Lane lane : b.lanes()) {
-            for (Item i : lane.items()) out.put(i.key(), flow(lane.id(), i, ctx(b, i, null, now)));
-        }
-        if (b.mvnpm() != null) {
-            for (Board.MvnpmRow r : b.mvnpm().rows()) out.put(r.item().key(), flow("mvnpm", r.item(), ctx(b, r.item(), r, now)));
+            for (Item i : lane.items()) out.put(i.key(), flow(lane.id(), i, ctx(b, i, now)));
         }
         return out;
     }
 
-    private static Ctx ctx(Board b, Item i, Board.MvnpmRow row, Instant now) {
-        List<String> running = b.mvnpmChecks() == null ? List.of() : b.mvnpmChecks().running();
-        boolean checking = row != null && (running.contains("mvnpm-dependabot.service")
-                || running.contains("mvnpm-dependabot-pr-" + i.repo().replace('/', '-') + "-" + i.number() + ".service"));
+    private static Ctx ctx(Board b, Item i, Instant now) {
         return new Ctx(b.login(), get(b.threads(), i.key()), get(b.merges(), i.key()), get(b.sinceReview(), i.key()),
-                get(b.reviewedAt(), i.key()), Objects.requireNonNullElse(get(b.linkedPrs(), i.key()), List.of()), row,
-                checking, now, get(b.feedback(), i.key()), rebaseAsked(b.rebasing(), i, now));
+                get(b.reviewedAt(), i.key()), Objects.requireNonNullElse(get(b.linkedPrs(), i.key()), List.of()),
+                now, get(b.feedback(), i.key()), rebaseAsked(b.rebasing(), i, now));
     }
 
     /** You asked Dependabot to rebase this head commit within the last hour: it hasn't pushed yet. */
@@ -92,14 +82,12 @@ public final class FlowClassifier {
             case BoardClassifier.MINE -> "mine";
             case BoardClassifier.REVIEW -> "review";
             case BoardClassifier.ASSIGNED -> i.isPr() ? "review" : "issue";
-            case "mvnpm" -> "mvnpm";
             default -> "involved";
         };
         Flow base = switch (role) {
             case "mine" -> mine(i, c);
             case "review" -> review(i, c);
             case "issue" -> issue(i, c);
-            case "mvnpm" -> mvnpm(i, c);
             default -> involved(i, c);
         };
         return merge(agent(rebasing(base, c), c), c);
@@ -323,46 +311,6 @@ public final class FlowClassifier {
         }
         return flow("issue", ISSUE_STEPS, 1, Flow.YOU, i.updatedAt(), "Investigated.", new Flow.Next("fix", "Fix it"),
                 List.of(new Flow.Next("investigate", "Investigate again"), new Flow.Next("open", "Open")));
-    }
-
-    /** A Dependabot mvnpm bump: the elf checks it, then merge or close. */
-    static Flow mvnpm(Item i, Ctx c) {
-        Board.MvnpmRow r = c.mvnpm();
-        if (c.mvnpmChecking()) return flow("mvnpm", MVNPM_STEPS, 0, Flow.AGENT, c.now(), "mvnpm-dependabot is checking it.", null, List.of());
-        if (r == null || r.check() == null || !r.current()) {
-            return flow("mvnpm", MVNPM_STEPS, 0, Flow.YOU, i.updatedAt(),
-                    r == null || r.check() == null ? "Not checked yet." : "Not checked at this commit.",
-                    new Flow.Next("mvnpm-check", "Check now"), List.of());
-        }
-        if (hasConflicts(i) || behind(i)) {
-            return flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), hasConflicts(i) ? "Conflicts with its base." : "Behind its base.",
-                    new Flow.Next("dependabot-rebase", "Ask Dependabot to rebase"), List.of());
-        }
-        return switch (r.check().verdict()) {
-            case "SAFE" -> {
-                if (GitHub.AWAITING_APPROVAL.equals(i.ci())) {
-                    yield flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), "Safe. CI waits for you to approve the run.",
-                            new Flow.Next("ci-approve", "Approve CI run"), List.of());
-                }
-                if (pending(i, c)) yield flow("mvnpm", MVNPM_STEPS, 1, Flow.CI, i.updatedAt(), "Safe. CI is running.", null, List.of());
-                if (ciFailing(i)) {
-                    // A web-jar bump rarely breaks the build: usually CI broke on the base and was fixed there since.
-                    // Re-running tests the same old merge again; a rebase takes the fix from the base.
-                    yield flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(),
-                            "Safe, but CI is failing. Rebasing picks up any CI fixes on its base.",
-                            new Flow.Next("dependabot-rebase", "Ask Dependabot to rebase"),
-                            present(new Flow.Next("ci-why", "Why did CI fail?"), rerun(i, false), new Flow.Next("close", "Close")));
-                }
-                if (mergeable(i)) yield flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), "Safe and green.", new Flow.Next("merge", "Merge"), List.of());
-                if (green(i)) yield flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), "Safe and green.",
-                        new Flow.Next("merge-anyway", "Merge"), List.of());
-                yield flow("mvnpm", MVNPM_STEPS, 1, Flow.CI, i.updatedAt(), "Safe. Waiting for required checks.", null, List.of());
-            }
-            case "NOT_SAFE" -> flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), "Not safe to merge.", new Flow.Next("close", "Close"),
-                    List.of(new Flow.Next("mvnpm-check", "Check again")));
-            default -> flow("mvnpm", MVNPM_STEPS, 1, Flow.YOU, i.updatedAt(), "The elf wants a human to look.", new Flow.Next("review", "Review"),
-                    List.of(new Flow.Next("mvnpm-check", "Check again")));
-        };
     }
 
     /** Mentioned or otherwise involved: no flow of its own; the agent can still look. */

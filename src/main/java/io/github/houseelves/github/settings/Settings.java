@@ -18,7 +18,6 @@ public class Settings {
 
     static final String REFRESH_MINUTES = "board.refresh-minutes";
     static final int DEFAULT_REFRESH_MINUTES = 5;
-    static final String MVNPM_ENABLED = "mvnpm.enabled";
     static final String ALWAYS_INVOLVED = "board.always-involved";
 
     private final Path file;
@@ -62,16 +61,6 @@ public class Settings {
         } catch (NumberFormatException e) {
             return DEFAULT_REFRESH_MINUTES;
         }
-    }
-
-    /** The mvnpm lane and checks on the desk (on unless turned off; they also need mvnpm-dependabot set up). */
-    public boolean mvnpmEnabled() {
-        String s = get(MVNPM_ENABLED);
-        return s == null || !s.equals("false");
-    }
-
-    public void setMvnpmEnabled(boolean on) {
-        put(MVNPM_ENABLED, Boolean.toString(on));
     }
 
     public void setRefreshMinutes(int minutes) {

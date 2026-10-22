@@ -75,7 +75,7 @@ export function hasConflicts(item) {
  * Status chips for a row. CI is already the icon's colour, so only what the icon can't say. With
  * {@code ciMenu}, failing CI is left out so the caller can show the CI menu in its place.
  *
- * @param approval false leaves out "Not approved" (mvnpm rows show the elf's own verdict instead)
+ * @param approval false leaves out "Not approved"
  */
 export function itemChips(item, { ciMenu = false, conflictMenu = false, approval = true } = {}) {
     const chips = [];
@@ -173,10 +173,10 @@ export function knownItem(itemKey) {
     return seen.get(itemKey);
 }
 
-/** Every item on a board, remembered: the lanes, the mvnpm bumps, the ignored and the not watched. */
+/** Every item on a board, remembered: the lanes, the ignored and the not watched. */
 export function rememberBoard(b) {
     if (!b) return;
-    [...(b.lanes ?? []).flatMap(l => l.items ?? []), ...(b.mvnpm?.rows ?? []).map(r => r.item), ...(b.hidden ?? []),
+    [...(b.lanes ?? []).flatMap(l => l.items ?? []), ...(b.hidden ?? []),
         ...(b.ignored ?? [])].forEach(i => { if (i?.key) rememberItem(i); });
     rememberLinks(b.linkedPrs);
 }

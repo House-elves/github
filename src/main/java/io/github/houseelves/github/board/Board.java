@@ -7,8 +7,6 @@ import java.util.Map;
 import io.github.houseelves.github.github.GitHub;
 import io.github.houseelves.github.github.Item;
 import io.github.houseelves.github.merge.MergeService;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
-import io.github.houseelves.github.mvnpm.MvnpmRuns;
 import io.github.houseelves.github.thread.ThreadView;
 
 /**
@@ -35,7 +33,6 @@ public record Board(
         boolean scopeEmpty,
         boolean truncated,
         List<Lane> lanes,
-        MvnpmLane mvnpm,
         List<Item> hidden,
         List<Item> ignored,
         Map<String, ThreadView.Summary> threads,
@@ -43,7 +40,6 @@ public record Board(
         boolean refreshing,
         Map<String, MergeService.View> merges,
         Map<String, String> returned,
-        MvnpmRuns.State mvnpmChecks,
         Map<String, String> sinceReview,
         Map<String, List<GitHub.LinkedPr>> linkedPrs,
         Map<String, Instant> reviewedAt,
@@ -54,44 +50,38 @@ public record Board(
     /** The same board with the desk's own state (threads, merges, runner) added. */
     public Board with(Map<String, ThreadView.Summary> threads, Map<String, MergeService.View> merges,
             boolean runnerConnected) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
     }
 
     /** Adds which PRs you reviewed moved on since ("New commits since your review"). */
     public Board sinceReview(Map<String, String> since) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, since, linkedPrs, reviewedAt, flows, feedback, rebasing);
-    }
-
-    /** Adds which mvnpm-dependabot checks are running now. */
-    public Board mvnpmChecks(MvnpmRuns.State checks) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, checks, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, since, linkedPrs, reviewedAt, flows, feedback, rebasing);
     }
 
     /** Adds why recently un-ignored items came back ("Review requested", "You were mentioned"). */
     public Board returned(Map<String, String> returned) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
     }
 
     /** Adds when you last reviewed each of others' PRs. */
     public Board reviewedAt(Map<String, Instant> at) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, at, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, at, flows, feedback, rebasing);
     }
 
     /** Adds what reviewers said last on your PRs. */
     public Board feedback(Map<String, GitHub.Feedback> said) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt, flows, said, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, flows, said, rebasing);
     }
 
     /** Adds the Dependabot PRs you asked to rebase. */
     public Board rebasing(Map<String, Rebase> asked) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt, flows, feedback,
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, flows, feedback,
                 asked);
     }
 
@@ -105,37 +95,23 @@ public record Board(
 
     /** Works out every item's flow from everything else on the board. Call last. */
     public Board withFlows(Instant now) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt,
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt,
                 FlowClassifier.flows(this, now), feedback, rebasing);
     }
 
     /** Adds the open PRs that fix or mention each issue. */
     public Board linkedPrs(Map<String, List<GitHub.LinkedPr>> links) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, links, reviewedAt, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, links, reviewedAt, flows, feedback, rebasing);
     }
 
     /** Marks a board served from a stale cache while fresh data is being fetched. */
     public Board refreshing(boolean refreshing) {
-        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, mvnpm, hidden, ignored, threads,
-                runnerConnected, refreshing, merges, returned, mvnpmChecks, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, flows, feedback, rebasing);
     }
 
     public record Lane(String id, String title, List<Item> items) {
-    }
-
-    /**
-     * @param installed false when mvnpm-dependabot isn't set up on this machine
-     * @param repos     the repos that elf watches
-     */
-    public record MvnpmLane(boolean installed, List<String> repos, List<MvnpmRow> rows) {
-    }
-
-    /**
-     * @param check   the elf's last recorded check, or null if it never checked this PR
-     * @param current true when that check was made at the PR's current head commit
-     */
-    public record MvnpmRow(Item item, MvnpmElf.Check check, boolean current) {
     }
 }

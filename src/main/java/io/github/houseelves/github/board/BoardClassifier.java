@@ -6,15 +6,10 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import com.fasterxml.jackson.databind.JsonNode;
 
 import io.github.houseelves.github.github.Item;
-import io.github.houseelves.github.mvnpm.MvnpmElf;
 import io.github.houseelves.github.scope.Scope;
 
 /**
@@ -22,7 +17,6 @@ import io.github.houseelves.github.scope.Scope;
  * easy to test. Order of precedence, first match wins:
  * <ol>
  * <li>anything you chose to ignore goes to the ignored list;</li>
- * <li>a Dependabot mvnpm bump in a repo mvnpm-dependabot watches goes to the mvnpm lane, whatever the scope;</li>
  * <li>anything outside the scope is hidden, review requests included;</li>
  * <li>your own PRs; then PRs you were asked to review or have reviewed (they stay until merged or closed, even
  * after you approve, which removes GitHub's review request); then issues assigned to you; then everything else
@@ -44,35 +38,15 @@ public final class BoardClassifier {
 
     /** What was fetched from GitHub, before any classification. */
     public record Fetched(String login, Instant at, List<Item> involved, List<Item> reviewRequested,
-            List<Item> reviewedByMe, List<Item> mvnpmCandidates, boolean truncated) {
+            List<Item> reviewedByMe, boolean truncated) {
     }
 
-    public static Board classify(Fetched f, Scope scope, List<String> mvnpmRepos, boolean mvnpmInstalled,
-            JsonNode mvnpmState, int refreshMinutes) {
-        return classify(f, scope, mvnpmRepos, mvnpmInstalled, mvnpmState, refreshMinutes, Set.of());
+    public static Board classify(Fetched f, Scope scope, int refreshMinutes) {
+        return classify(f, scope, refreshMinutes, Set.of());
     }
 
-    public static Board classify(Fetched f, Scope scope, List<String> mvnpmRepos, boolean mvnpmInstalled,
-            JsonNode mvnpmState, int refreshMinutes, Set<String> ignoredKeys) {
+    public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys) {
         List<Item> ignored = new ArrayList<>();
-        Set<String> elfRepos = mvnpmRepos.stream().map(r -> r.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
-
-        List<Board.MvnpmRow> mvnpmRows = new ArrayList<>();
-        Set<String> mvnpmKeys = new HashSet<>();
-        for (Item item : dedupe(f.mvnpmCandidates()).values()) {
-            if (!isElfHandled(item, elfRepos)) continue;
-            if (ignoredKeys.contains(item.key())) {
-                ignored.add(item);
-                mvnpmKeys.add(item.key());
-                continue;
-            }
-            mvnpmKeys.add(item.key());
-            MvnpmElf.Check check = MvnpmElf.check(mvnpmState, item.repo(), item.number()).orElse(null);
-            boolean current = check != null && check.sha() != null && check.sha().equals(item.headSha());
-            mvnpmRows.add(new Board.MvnpmRow(item, check, current));
-        }
-        mvnpmRows.sort(Comparator.comparing(Board.MvnpmRow::item, NEWEST_FIRST));
-
         Set<String> reviewKeys = new HashSet<>();
         f.reviewRequested().forEach(i -> reviewKeys.add(i.key()));
         f.reviewedByMe().forEach(i -> reviewKeys.add(i.key()));
@@ -83,7 +57,6 @@ public final class BoardClassifier {
         List<Item> hidden = new ArrayList<>();
 
         for (Item item : all.values()) {
-            if (mvnpmKeys.contains(item.key()) || isElfHandled(item, elfRepos)) continue;
             if (ignoredKeys.contains(item.key())) {
                 ignored.add(item);
             } else if (!scope.covers(item.repo())) {
@@ -109,12 +82,8 @@ public final class BoardClassifier {
                 new Board.Lane(INVOLVED, "Mentioned / involved", lanes.get(INVOLVED)));
 
         return new Board(f.login(), f.at(), refreshMinutes, scope.isEmpty(), f.truncated(), laneList,
-                new Board.MvnpmLane(mvnpmInstalled, mvnpmRepos, mvnpmRows), hidden, ignored, Map.of(), false, false,
-                Map.of(), Map.of(), null, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
-    }
-
-    private static boolean isElfHandled(Item item, Set<String> elfRepos) {
-        return elfRepos.contains(item.repo().toLowerCase(Locale.ROOT)) && MvnpmElf.isMvnpmBump(item);
+                hidden, ignored, Map.of(), false, false,
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 
     @SafeVarargs

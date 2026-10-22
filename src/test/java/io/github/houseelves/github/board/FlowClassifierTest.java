@@ -37,7 +37,7 @@ class FlowClassifierTest {
 
     static FlowClassifier.Ctx ctx(ThreadView.Summary t, MergeService.View m, String sinceReview, Instant reviewedAt,
             List<GitHub.LinkedPr> links) {
-        return new FlowClassifier.Ctx(ME, t, m, sinceReview, reviewedAt, links, null, false, NOW);
+        return new FlowClassifier.Ctx(ME, t, m, sinceReview, reviewedAt, links, NOW);
     }
 
     static ThreadView.Summary thread(String state, String action, String draftKind) {
@@ -166,14 +166,14 @@ class FlowClassifierTest {
     void aReviewerSpeakingAfterYouMakesItYourMove() {
         Item waiting = pr2(ME, "SUCCESS", "BLOCKED", "MERGEABLE", false, false, "REVIEW_REQUIRED");
         Instant at = NOW.minusSeconds(3600);
-        Flow f = FlowClassifier.flow("mine", waiting, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), null, false, NOW,
+        Flow f = FlowClassifier.flow("mine", waiting, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
                 new GitHub.Feedback("brunobat", at, "COMMENTED", true, 2)));
         is(f, Flow.YOU, 2, "read-review");
         assertEquals("address", f.more().get(0).id());
         assertEquals("brunobat reviewed, 2 threads open.", f.say());
         assertEquals(at, f.since());
         // You answered since: back to waiting on them, with the threads still mentioned.
-        f = FlowClassifier.flow("mine", waiting, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), null, false, NOW,
+        f = FlowClassifier.flow("mine", waiting, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
                 new GitHub.Feedback("brunobat", at, "COMMENTED", false, 1)));
         is(f, Flow.OTHERS, 2, null);
         org.junit.jupiter.api.Assertions.assertTrue(f.say().endsWith(", 1 thread open."), f.say());
@@ -200,34 +200,19 @@ class FlowClassifierTest {
     }
 
     @Test
-    void aSafeBumpWithFailingCiIsRebasedFirst() {
-        Item bump = pr2("dependabot[bot]", "FAILURE", "UNSTABLE", "MERGEABLE", false, false, null);
-        Board.MvnpmRow row = new Board.MvnpmRow(bump, new io.github.houseelves.github.mvnpm.MvnpmElf.Check(bump.headSha(), "SAFE", true,
-                null, NOW), true);
-        Flow f = FlowClassifier.flow("mvnpm", bump, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), row, false, NOW));
-        is(f, Flow.YOU, 1, "dependabot-rebase");
-        assertEquals(List.of("ci-why", "ci-rerun", "close"), f.more().stream().map(Flow.Next::id).toList());
+    void aDependabotPrWithConflictsAsksDependabotToRebaseThenWaitsForIt() {
+        Item bump = pr2("dependabot[bot]", "SUCCESS", "DIRTY", "CONFLICTING", true, false, "APPROVED");
+        is(FlowClassifier.flow("review", bump, ctx()), Flow.YOU, 2, "dependabot-rebase");
 
         // Asked: wait for Dependabot's push, no button to ask again.
         Instant asked = NOW.minusSeconds(120);
-        Flow waiting = FlowClassifier.flow("mvnpm", bump, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), row, false, NOW,
+        Flow waiting = FlowClassifier.flow("review", bump, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
                 null, FlowClassifier.rebaseAsked(java.util.Map.of(bump.key(), new Board.Rebase(bump.headSha(), asked)), bump, NOW)));
-        is(waiting, Flow.OTHERS, 1, null);
-        assertEquals(List.of("close"), waiting.more().stream().map(Flow.Next::id).toList());
+        is(waiting, Flow.OTHERS, 2, null);
         // Once the head moved (or an hour went by), the ask is done with.
         assertNull(FlowClassifier.rebaseAsked(java.util.Map.of(bump.key(), new Board.Rebase("older-sha", asked)), bump, NOW));
         assertNull(FlowClassifier.rebaseAsked(java.util.Map.of(bump.key(), new Board.Rebase(bump.headSha(), NOW.minusSeconds(7200))),
                 bump, NOW));
-    }
-
-    @Test
-    void aSafeBumpWhoseCiWaitsForYouAsksYouToApproveIt() {
-        // quarkusio/quarkus#57185: Quarkus CI held at the "dependabot" environment, which you review.
-        Item bump = pr2("dependabot[bot]", "PENDING", "BLOCKED", "MERGEABLE", false, false, null).withDetails("BLOCKED", true);
-        Board.MvnpmRow row = new Board.MvnpmRow(bump, new io.github.houseelves.github.mvnpm.MvnpmElf.Check(bump.headSha(), "SAFE", true,
-                null, NOW), true);
-        is(FlowClassifier.flow("mvnpm", bump, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), row, false, NOW)),
-                Flow.YOU, 1, "ci-approve");
     }
 
     // ---- PRs to review ----
