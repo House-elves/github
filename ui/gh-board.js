@@ -211,6 +211,14 @@ class GhBoard extends LitElement {
         li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
         li.open { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
         li .icon { margin-top: 3px; }
+        .lead { display: grid; justify-items: center; gap: 8px; }
+        /* Later: a quiet zz under the row's icon, on rows in Your move; lit on rows put aside. */
+        button.snooze { width: 22px; height: 22px; margin: 0 -3px; padding: 0; border: 0; border-radius: 6px; background: none;
+            color: var(--muted); opacity: .55; cursor: pointer; display: grid; place-items: center; }
+        button.snooze svg { width: 15px; height: 15px; }
+        li:hover button.snooze, button.snooze:focus-visible { opacity: 1; }
+        button.snooze:hover { color: var(--ink); background: var(--surface-2); }
+        button.snooze.on { opacity: 1; color: var(--accent); }
         .main { min-width: 0; display: grid; gap: 5px; cursor: pointer; }
         .line1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
         .role {
@@ -412,6 +420,18 @@ class GhBoard extends LitElement {
         } finally {
             this._ignoring = null;
         }
+    }
+
+    /** The zz under the icon: Later for a row in Your move, and back to Your move for one in Later. */
+    _snooze(item, f) {
+        if (f.waiting !== 'you' && f.waiting !== 'later') return '';
+        const later = f.waiting === 'later';
+        const label = later ? 'Back to Your move' : 'Later: put it aside until you do something with it';
+        return html`<button class="snooze ${later ? 'on' : ''}" title=${label} aria-label=${label} aria-pressed=${later ? 'true' : 'false'}
+                ?disabled=${this._moving !== null} @click=${() => this._later(item, !later)}>
+            ${this._moving === item.key ? spinner : html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 7h5L2 13h5"/><path d="M9.5 3h4.5l-4.5 5H14"/></svg>`}</button>`;
     }
 
     /** Your move, but not now: under Later until you do something with it (or bring it back). */
@@ -693,7 +713,7 @@ class GhBoard extends LitElement {
         const back = this._board?.returned?.[item.key];
         return html`
             <li class="row ${open ? 'open' : ''}" tabindex="0" data-key=${item.key}>
-                ${kindIcon(item)}
+                <div class="lead">${kindIcon(item)}${this._snooze(item, f)}</div>
                 <div class="main" @click=${e => { if (!e.target.closest('a, button')) this._toggle(item.key); }}>
                     <div class="line1">
                         <span class="role">${roleTag(item, f.role)}</span>
@@ -771,10 +791,6 @@ class GhBoard extends LitElement {
             ${!merged && item.kind === 'PR' && !ids.has('whats-new') ? this._action(item, { id: 'whats-new', label: "What's new" }, false) : ''}
             ${f.role === 'involved' && !assigned ? this._action(item, { id: 'assign', label: 'Assign me' }, false) : ''}
             <a class="btn sm quiet" href=${threadHref(item.key)}>Open page</a>
-            ${f.waiting === 'you' || f.waiting === 'later' ? html`<button class="sm quiet" ?disabled=${this._moving !== null}
-                @click=${() => this._later(item, f.waiting === 'you')}
-                title=${f.waiting === 'you' ? 'Not now: under Later until you do something with it'
-                    : 'Back to Your move'}>${this._moving === item.key ? spinner : ''}${f.waiting === 'you' ? 'Later' : 'Your move now'}</button>` : ''}
             ${!merged && !ids.has('ignore') ? html`<button class="sm quiet" ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, true)}
                 title="Someone else is handling it: move it to Ignored">${this._ignoring === item.key ? spinner : ''}Ignore</button>` : ''}
             ${!merged && !ids.has('close') ? this._closeButton(item) : ''}
