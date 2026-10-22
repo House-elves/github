@@ -401,6 +401,17 @@ class ThreadFlowTest {
     }
 
     @Test
+    void anItemsAiCostIsWhatItsAgentsCostTogether() throws Exception {
+        threads.start(KEY, Prompts.REVIEW, null, "phillip-kruger", "gho_t");
+        assertNull(threads.view(KEY).cost());
+        threads.jobDone(openJob(), "s", output("Looks fine.", "null"), new java.math.BigDecimal("0.42"));
+        threads.reply(KEY, "And the tests?", "phillip-kruger", "gho_t");
+        threads.jobDone(openJob(), "s", output("They pass.", "null"), new java.math.BigDecimal("0.08"));
+        assertEquals(0, new java.math.BigDecimal("0.50").compareTo(threads.view(KEY).cost()));
+        assertEquals(0, new java.math.BigDecimal("0.50").compareTo(threads.summaries().get(KEY).cost()));
+    }
+
+    @Test
     void aPushCanAskTheReviewersAgainOnceItsThere() throws Exception {
         threads.start(KEY, Prompts.REVIEW, null, "phillip-kruger", "gho_t");
         String head = "a".repeat(40), fixed = "b".repeat(40);

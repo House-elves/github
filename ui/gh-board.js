@@ -4,8 +4,7 @@
 import { LitElement, html, css, shared, ago, spinner, Ticking, count, elf } from '/elf-kit/1/kit.js';
 import {
     linkedPrChips, rememberLinks, itemChips, ciFailing, hasConflicts, mergeableAnyway, kindIcon, threadHref, rememberItem,
-    settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline,
-} from './shared.js';
+    settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline, usd, COST_HINT } from './shared.js';
 import { act, board, cancelled, errorMessage, squash, startAgent } from './api.js';
 import './merge-control.js';
 import './ci-menu.js';
@@ -86,6 +85,12 @@ const CALLS = {
 
 /** Steps that start the agent or CI, which an open row's panel offers next to the agent's answer. */
 const PANEL_STEPS = new Set(['self-fix', 'ci-fix', 'ci-why', 'ci-rerun', 'ci-reopen', 'conflicts', 'address', 'fix', 'investigate', 'review']);
+
+/** What the agents on every item cost together, or null when none said. */
+function aiTotal(b) {
+    const costs = Object.values(b?.threads ?? {}).map(t => t.cost).filter(c => c != null).map(Number);
+    return costs.length ? costs.reduce((x, y) => x + y, 0) : null;
+}
 
 /**
  * Its settings, in the desk's Settings pop-up: what the board watches (gh-settings.js, this elf's settings view),
@@ -633,6 +638,7 @@ class GhBoard extends LitElement {
                 <div class="status">
                     ${b.runnerConnected ? '' : html`<span class="runner">Runner offline</span>`}
                     <span class="muted updated">Updated ${ago(b.fetchedAt)}</span>
+                    ${aiTotal(b) != null ? html`<span class="muted" title=${COST_HINT}>AI so far ${usd(aiTotal(b))}</span>` : ''}
                     <button class="sm" @click=${() => this._load(true)} ?disabled=${this._refreshing}>
                         ${this._refreshing ? spinner : ''}${this._refreshing ? 'Refreshing' : 'Refresh'}</button>
                     ${this._failed() ? html`<span class="chip bad" title=${this._failed()}>The last refresh failed</span>` : ''}
@@ -729,6 +735,8 @@ class GhBoard extends LitElement {
                         ${back ? html`<span class="chip run" title="It was ignored; this brought it back">Back: ${back.toLowerCase()}</span>` : ''}
                         ${item.kind === 'ISSUE' && f.role !== 'issue' ? linkedPrChips(item.key) : ''}
                         ${this._commitsChip(item, f)}
+                        ${this._board?.threads?.[item.key]?.cost != null
+                            ? html`<span class="cost" title=${COST_HINT}>AI ${usd(this._board.threads[item.key].cost)}</span>` : ''}
                     </div>
                     ${this._rowError?.key === item.key ? html`<p class="error row-error" role="alert">${this._rowError.text}
                         <button class="quiet sm" @click=${() => { this._rowError = null; }}>Dismiss</button></p>` : ''}

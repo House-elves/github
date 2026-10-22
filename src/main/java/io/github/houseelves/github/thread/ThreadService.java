@@ -88,7 +88,13 @@ public class ThreadService {
         List<ThreadView.PostedView> posted = store.drafts(t.id).stream().filter(x -> x.state.equals(Draft.POSTED))
                 .sorted(java.util.Comparator.comparing(x -> x.postedAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
                 .map(x -> new ThreadView.PostedView(x.kind, x.postedUrl, x.postedAt)).toList();
-        return new ThreadView(t.itemKey, t.itemKind, t.title, t.url, true, turns, job, draft, posted, isOwn(t.id));
+        return new ThreadView(t.itemKey, t.itemKind, t.title, t.url, true, turns, job, draft, posted, isOwn(t.id), cost(t.id));
+    }
+
+    /** What the agents on a thread have cost, all together: null when none said. */
+    java.math.BigDecimal cost(long threadId) {
+        return store.jobs(threadId).stream().map(j -> j.costUsd).filter(java.util.Objects::nonNull)
+                .reduce(java.math.BigDecimal::add).orElse(null);
     }
 
     /** The open job with what the runner's report says of it so far: its state, when it started, its lines. */
@@ -128,7 +134,7 @@ public class ThreadService {
             int fixes = review != null && review.action.equals(Prompts.REVIEW) && review.fixes != null ? review.fixes : 0;
             out.put(t.itemKey, new ThreadView.Summary(t.itemKey, state, job == null ? null : job.action,
                     draft == null ? null : draft.kind, since, failed && draft == null,
-                    posted == null ? null : posted.kind, posted == null ? null : posted.postedAt, fixes));
+                    posted == null ? null : posted.kind, posted == null ? null : posted.postedAt, fixes, cost(t.id)));
         }
         return out;
     }
@@ -348,7 +354,11 @@ public class ThreadService {
                         report.path("cost").isNumber() ? report.path("cost").decimalValue() : null,
                         report.path("git").isObject() ? report.path("git") : null);
             }
-            case "failed" -> jobFailed(j.id, report.path("error").asText("The runner reported a failure"));
+            case "failed" -> {
+                // A run that failed still cost something.
+                if (report.path("cost").isNumber()) j.costUsd = report.path("cost").decimalValue();
+                jobFailed(j.id, report.path("error").asText("The runner reported a failure"));
+            }
             case "cancelled" -> {
                 j.state = Job.CANCELLED;
                 j.finished = Instant.now();

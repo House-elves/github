@@ -5,8 +5,7 @@
 import { LitElement, html, css, shared, ago, markdown, markdownStyles, spinner, Ticking, copyText, elf } from '/elf-kit/1/kit.js';
 import {
     isDependabot, linksFor, prRef, threadHref, rememberItem, knownItem, kindIcon, ciFailing, ciNeedsApproval, hasConflicts,
-    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores,
-} from './shared.js';
+    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores, usd, COST_HINT } from './shared.js';
 import { act, agentReport, board, cancel, cancelled, errorMessage, post, squash, startAgent, thread } from './api.js';
 import './gh-description.js';
 import './merge-control.js';
@@ -647,6 +646,7 @@ class GhThread extends LitElement {
                     ${kind === 'ISSUE' && linksFor(this.itemKey).length ? html`<dt>PRs</dt><dd class="links">${linksFor(this.itemKey).map(pr => html`
                         <a href=${threadHref(pr.key)} title=${pr.title}>${prRef(this.itemKey, pr.key)}</a>
                         <span class="muted">${pr.fixes ? 'fixes it' : 'mentions it'}, by ${pr.author}</span>`)}</dd>` : ''}
+                    ${t?.cost != null ? html`<dt>AI cost</dt><dd title=${COST_HINT}>${usd(t.cost)}</dd>` : ''}
                     <dt>Runner</dt><dd><span class="runner ${t?.runnerConnected ? 'on' : ''}">${t ? (t.runnerConnected ? 'Online' : 'Offline') : 'Unknown'}</span></dd>
                 </dl>
                 <div class="acts">

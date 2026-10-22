@@ -38,6 +38,10 @@ the PR then waits on them. Pushing the agent's fixes to your PR offers the same 
 Each item's open panel and page start with its **Description**, folded: open it to read the issue's or PR's own
 text from GitHub (read only then).
 
+What the agents cost shows as **AI $…**: per item on its row and page (all its agent runs, failed ones too), and
+for everything at the top of the board. It's Claude Code's own figure at API prices; on a Claude subscription
+it's what it would have cost, not what you're billed.
+
 An item in Your move can go to **Later** (the zz under its icon): it waits there, after Waiting on CI, until you
 do something with it (start the agent, post, merge, ...) or click its zz again. It's kept in
 `state/later.json`; nothing changes on GitHub.

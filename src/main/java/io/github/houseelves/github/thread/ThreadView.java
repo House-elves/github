@@ -19,7 +19,14 @@ public record ThreadView(
         JobView job,
         DraftView draft,
         List<PostedView> posted,
-        boolean own) {
+        boolean own,
+        java.math.BigDecimal cost) {
+
+    /** {@code cost}: what the agents on this item have cost so far, in US dollars (Claude Code's own figure); null: nothing yet. */
+    public ThreadView(String itemKey, String kind, String title, String url, boolean runnerConnected, List<TurnView> turns,
+            JobView job, DraftView draft, List<PostedView> posted, boolean own) {
+        this(itemKey, kind, title, url, runnerConnected, turns, job, draft, posted, own, null);
+    }
 
     /**
      * @param job   the job that wrote an agent's answer, or null
@@ -56,7 +63,12 @@ public record ThreadView(
      * @param reviewFixes the fixes the last self-review found and nobody has made yet (0: none, or not a self-review)
      */
     public record Summary(String itemKey, String state, String action, String draftKind, java.time.Instant since,
-            boolean failed, String postedKind, java.time.Instant postedAt, int reviewFixes) {
+            boolean failed, String postedKind, java.time.Instant postedAt, int reviewFixes, java.math.BigDecimal cost) {
+
+        public Summary(String itemKey, String state, String action, String draftKind, java.time.Instant since,
+                boolean failed, String postedKind, java.time.Instant postedAt, int reviewFixes) {
+            this(itemKey, state, action, draftKind, since, failed, postedKind, postedAt, reviewFixes, null);
+        }
 
         public Summary(String itemKey, String state) {
             this(itemKey, state, null, null, null, false, null, null, 0);

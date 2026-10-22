@@ -12,6 +12,19 @@ export function settingsToggle(open, onClick) {
         </svg>Settings</button>`;
 }
 
+/**
+ * What AI cost, in US dollars: "$0.42" ("<$0.01" for less). Claude Code's own figure, at API prices: on a Claude
+ * subscription it's what it would have cost, not what you're billed.
+ */
+export function usd(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '';
+    return v > 0 && v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`;
+}
+
+/** What it says when you hover over a cost. */
+export const COST_HINT = "What the agents cost so far: Claude Code's figure at API prices (on a subscription, not what you're billed)";
+
 /** PR or issue icon, coloured by state: CI for PRs, open/closed for issues. */
 export function kindIcon(item) {
     if (item.kind === 'PR') {
