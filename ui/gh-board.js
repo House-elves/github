@@ -657,20 +657,23 @@ class GhBoard extends LitElement {
     }
 
     /**
-     * The elf's own setting (the GitHub account), in the desk's dialog so it never reaches the tab. mvnpm-dependabot's
-     * settings and the runner's (the agents) aren't this elf's: they're on their own tabs and the Elves page.
+     * The elf itself: the GitHub account it works as, and its own settings in the desk's dialog (its version, an
+     * update, when it refreshes on its own, removing it), so secrets never reach the tab. mvnpm-dependabot's settings
+     * are on the desk's + page (it has no tab), and the runner's at the bottom of that page.
      */
     _renderElfSettings(b) {
         return html`<section class="elf-settings" aria-labelledby="account">
-            <div class="sec-head"><h2 id="account">GitHub account</h2></div>
+            <div class="sec-head"><h2 id="account">This elf</h2></div>
             <div class="panel general">
                 <span>The board works as <b>${b.login}</b>, with that gh account's token.</span>
                 <button class="sm" @click=${() => elf.settings(['GITHUB_ACCOUNT'], 'GitHub account')}>Change</button>
-                <button class="sm quiet" @click=${() => elf.settings(null, 'GitHub settings')}
-                    title="The elf's settings, when it refreshes on its own, and removing it">More settings</button>
             </div>
-            <p class="small muted" style="margin:0">${b.mvnpm?.installed ? 'mvnpm-dependabot\'s settings are on its own tab. ' : ''}The
-                runner's (how the agents run) are on the desk's Elves page.</p>
+            <div class="panel general">
+                <span>Its version and updates, when it refreshes on its own, and removing it.</span>
+                <button class="sm" @click=${() => elf.settings(null, 'GitHub settings')}>Version and updates</button>
+            </div>
+            <p class="small muted" style="margin:0">${b.mvnpm?.installed ? 'mvnpm-dependabot\'s settings are on the desk\'s + page. ' : ''}How
+                the agents run (the runner's settings) is at the bottom of the + page.</p>
         </section>`;
     }
 
