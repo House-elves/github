@@ -8,6 +8,7 @@ import {
     behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores,
 } from './shared.js';
 import { act, agentReport, board, cancel, cancelled, errorMessage, post, squash, startAgent, thread } from './api.js';
+import './gh-description.js';
 import './merge-control.js';
 import './ci-menu.js';
 import './conflict-menu.js';
@@ -68,7 +69,7 @@ class GhThread extends LitElement {
         .back { font-size: 14px; color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; }
         .back:hover { color: var(--ink); }
         .layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 40px; align-items: start; margin-top: 18px; }
-        .convo { display: grid; gap: 22px; min-width: 0; max-width: 780px; }
+        .convo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; max-width: 780px; }
         .title-block { display: grid; gap: 8px; }
         .files, .change { display: grid; gap: 10px; min-width: 0; }
         .files-toggle { justify-self: start; }
@@ -563,6 +564,7 @@ class GhThread extends LitElement {
                         <span class="ref">${kind ? kindIcon({ kind, ci: item?.ci }) : ''}${this.itemKey}</span>
                         <h1>${url ? html`<a href=${url} target="_blank" rel="noopener">${title}</a>` : title}</h1>
                     </div>
+                    <gh-description .itemKey=${this.itemKey} .url=${url}></gh-description>
                     ${this._recap && t ? this._renderRecap(t, kind, item) : ''}
                     ${kind === 'PR' && url ? this._renderFiles(url) : ''}
                     ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
@@ -596,6 +598,7 @@ class GhThread extends LitElement {
         const notes = turns.slice(lastAnswer ? turns.indexOf(lastAnswer) + 1 : 0).filter(x => x.role === 'system').slice(-3);
         return html`
             <div class="compact">
+                <gh-description .itemKey=${this.itemKey} .url=${url}></gh-description>
                 ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
                 ${this._posted ? html`<p class="posted"><span class="chip ok">Posted</span>
                     <a href=${this._posted} target="_blank" rel="noopener">${this._posted}</a></p>` : ''}

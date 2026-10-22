@@ -257,8 +257,11 @@ public class GitHub {
      * @param closes  PRs only: the issues it fixes or closes, as #123 (same repo) or owner/repo#123
      * @param files   PRs only: how many files it changes, or null
      */
-    public record About(String summary, List<String> closes, Integer files, Integer additions, Integer deletions) {
+    /** @param body the description as written (markdown), cut at {@link #BODY_MAX} characters */
+    public record About(String summary, List<String> closes, Integer files, Integer additions, Integer deletions, String body) {
     }
+
+    static final int BODY_MAX = 60_000;
 
     public About about(String token, String repo, int number) {
         String[] parts = repo.split("/", 2);
@@ -285,10 +288,12 @@ public class GitHub {
             closes.add((in.equalsIgnoreCase(repo) ? "" : in) + "#" + c.path("number").asInt());
         }
         boolean pr = n.has("changedFiles");
-        return new About(summary(n.path("body").asText("")), List.copyOf(closes),
+        String body = n.path("body").asText("");
+        return new About(summary(body), List.copyOf(closes),
                 pr ? n.path("changedFiles").asInt() : null,
                 pr ? n.path("additions").asInt() : null,
-                pr ? n.path("deletions").asInt() : null);
+                pr ? n.path("deletions").asInt() : null,
+                body.length() <= BODY_MAX ? body : body.substring(0, BODY_MAX) + "\n\n…");
     }
 
     private static final Pattern NOT_PROSE = Pattern.compile(
