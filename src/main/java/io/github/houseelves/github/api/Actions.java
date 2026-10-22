@@ -93,7 +93,7 @@ public class Actions {
             case "set-refresh-minutes" -> api.setRefreshMinutes(p.path("minutes").asInt());
             case "seen" -> api.seen(key(p));
             case "post-done" -> api.postDone(p.path("draftId").asLong(), p.path("status").asInt(), p.path("error").asText(null));
-            case "squash-done" -> api.squashDone(key(p), p.path("status").asInt(), p.path("body").asText(null),
+            case "squash-done" -> api.squashDone(key(p), p.path("status").asInt(), squashed(p.path("file").asText(null)),
                     p.path("error").asText(null));
             case "agent-done" -> api.agentDone(text(p, "id"));
             // agent starts
@@ -169,6 +169,20 @@ public class Actions {
         String name = action + about + ".json";
         Json.write(elf.home.cache().resolve(name), json);
         return mapper.createObjectNode().put("file", name);
+    }
+
+    /** The squashed commit the runner kept in agents/ for squash-done (the file it named), read once and removed. */
+    private String squashed(String file) {
+        if (file == null || file.isBlank()) return null;
+        if (!file.matches("squash-\\d{1,20}\\.json")) throw new IllegalArgumentException("Not the runner's squash: " + file);
+        java.nio.file.Path f = elf.home.agents().resolve(file);
+        try {
+            String body = java.nio.file.Files.readString(f);
+            java.nio.file.Files.deleteIfExists(f);
+            return body;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("The runner's squash isn't there any more. Squash it again.");
+        }
     }
 
     private static String key(JsonNode p) {

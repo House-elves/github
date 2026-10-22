@@ -66,7 +66,7 @@ Reads (`ask: false`): `item`, `about`, `thread`, `pr-diff`, `pr-activity`, `pr-r
 `conflict-options`, `commit-count`, `merge-options`, `merge-status`, `suggestions`, `preview-post`, `settings`,
 `is-ignored`.
 
-Local changes (`ask: false`): `update-draft`, `discard-draft`, `ignore`, `unignore`, `ci-reopen`, `cancel-merge`,
+Local changes (`ask: false`): `update-draft`, `discard-draft`, `ignore`, `unignore`, `cancel-merge`,
 `watch`, `watch-all`, `exclude`, `remove`, `add-always-involved`, `remove-always-involved`, `set-mvnpm-enabled`,
 `set-refresh-minutes`, `seen` (the thread page was looked at), and the agent starts below.
 
@@ -75,7 +75,7 @@ Agent starts (`ask: false`; they write nothing to GitHub): `start` (with `action
 answers with `{"cancelAgent": id}` and the tab calls `elf.cancelAgent(id)`; the thread notes it).
 
 GitHub writes (`ask: true`, with a `confirm` text naming what happens, e.g. `Post this {kind} on {item}?`): `post`
-(review, comment, issue, push, pr: as `Poster.post`), `close`, `ready-for-review`, `assign-me`, `ci-rerun`,
+(review, comment, issue, push, pr: as `Poster.post`), `close`, `ci-reopen`, `ready-for-review`, `assign-me`, `ci-rerun`,
 `ci-approve`, `ask-dependabot-to-rebase`, `update-branch`, `squash`, `merge-on-green`, `merge-without-approval`,
 `mvnpm-run`. The desk's rule stays: nothing is written to GitHub without the person's click, and that click is the
 desk's confirm bar for these actions.
@@ -89,8 +89,9 @@ desk's confirm bar for these actions.
   posted mark, the board, and for a new PR, opening it). `post-done` only finishes a post that `post` started: `post`
   leaves a pending mark on the draft (with the commits and when), and `post-done` refuses without one, or one older
   than 15 minutes, or one for other commits. It never writes to GitHub otherwise.
-- Squashing (`squash`): answers with `{"squash": checkout}`; the runner squashes in the worktree and answers with
-  `{"squash": {status, body: git}}`; then the tab calls `squash-done` with it, as above.
+- Squashing (`squash`): answers with `{"squash": checkout}`; the runner squashes in the worktree, keeps the squashed
+  commit in `agents/squash-<n>.json` and answers with `{"squash": {status, file}}`; then the tab calls `squash-done`
+  with it, as above.
 
 ## Agents (elf.yaml `agents: {done: agent-done}`)
 

@@ -170,7 +170,7 @@ actions:
   ci-reopen:
     label: Close and reopen your PR to run CI again
     args: [--action=ci-reopen]
-    ask: false
+    confirm: "Close and reopen {itemKey} on GitHub, to run CI again?"
     params:
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   cancel-merge:
@@ -249,7 +249,8 @@ actions:
     params:
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       status: {kind: int}
-      body: {pattern: '[\s\S]*', max: 200000, optional: true}
+      # The runner keeps its squashed commit in agents/<file>; the tab only passes the name on.
+      file: {pattern: 'squash-\d{1,20}\.json', max: 40, optional: true}
       error: {pattern: '[\s\S]*', max: 4000, optional: true}
   agent-done:
     label: Take in an agent's answer
@@ -328,9 +329,9 @@ actions:
       draftId: {kind: int}
       confirm: {pattern: '[0-9a-f-]{36}', max: 36}
       asDraft: {kind: bool, optional: true}
-      # For the confirm bar's words; the elf refuses them unless they're the draft's.
-      kind: {one-of: [review, comment, push, issue, pr], optional: true}
-      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300, optional: true}
+      # For the confirm bar's words, so they're always there; the elf refuses them unless they're the draft's.
+      kind: {one-of: [review, comment, push, issue, pr]}
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   close:
     label: Close an item on GitHub
     args: [--action=close]

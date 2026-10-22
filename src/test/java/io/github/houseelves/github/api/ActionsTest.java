@@ -140,16 +140,21 @@ class ActionsTest {
     }
 
     @Test
-    void aSquashIsAnsweredForTheRunner() {
+    void aSquashIsAnsweredForTheRunner() throws Exception {
         when(github.ci(anyString(), eq("quarkusio/quarkus"), eq(50087))).thenReturn(new GitHub.CiReport("a".repeat(40), "SUCCESS",
                 List.of(), List.of(), "someone/quarkus", "feature", true));
         JsonNode a = act("squash", "{\"itemKey\": \"" + KEY + "\"}");
         assertEquals("quarkusio/quarkus", a.path("squash").path("repo").asText());
-        JsonNode done = act("squash-done", """
-                {"itemKey": "%s", "status": 200, "body": "{\\"from\\": \\"%s\\", \\"to\\": \\"%s\\", \\"base\\": \\"main\\", \\"squashed\\": true, \\"replaces\\": 2, \\"commits\\": [{\\"sha\\": \\"%s\\", \\"subject\\": \\"x\\"}]}"}"""
-                .formatted(KEY, "a".repeat(40), "c".repeat(40), "c".repeat(40)));
+        // The runner keeps its squashed commit in agents/ and names the file; the tab only passes the name on.
+        java.nio.file.Files.createDirectories(dir.resolve("agents"));
+        java.nio.file.Files.writeString(dir.resolve("agents/squash-17.json"), """
+                {"from": "%s", "to": "%s", "base": "main", "squashed": true, "replaces": 2, "commits": [{"sha": "%s", "subject": "x"}]}"""
+                .formatted("a".repeat(40), "c".repeat(40), "c".repeat(40)));
+        JsonNode done = act("squash-done", "{\"itemKey\": \"" + KEY + "\", \"status\": 200, \"file\": \"squash-17.json\"}");
         assertEquals("push", done.path("draft").path("kind").asText());
         assertTrue(done.path("draft").path("push").path("squashed").asBoolean());
+        assertFalse(java.nio.file.Files.exists(dir.resolve("agents/squash-17.json")));
+        assertThrows(IllegalArgumentException.class, () -> act("squash-done", "{\"itemKey\": \"" + KEY + "\", \"status\": 200, \"file\": \"../board/board.json\"}"));
     }
 
     @Test
