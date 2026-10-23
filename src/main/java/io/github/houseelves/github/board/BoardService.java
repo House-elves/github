@@ -53,6 +53,11 @@ public class BoardService {
 
     /** How long a load waits for GitHub before giving up. */
     static final Duration FIRST_LOAD_WAIT = Duration.ofSeconds(90);
+    /**
+     * How long a refresh waits: it's a run of its own, which ends when it gives up (nothing keeps fetching after it), and
+     * a big board takes about a minute when GitHub is well, longer when it answers 502/504 and is asked again.
+     */
+    static final Duration REFRESH_WAIT = Duration.ofMinutes(4);
     static final int MAX_INVOLVED = GitHub.SEARCH_CAP;
     static final int MAX_REVIEW = 300;
 
@@ -142,7 +147,7 @@ public class BoardService {
         BoardClassifier.Fetched fetched;
         boolean refreshing = false;
         if (refresh || cached == null) {
-            fetched = awaitAtMost(refetch(login, token), FIRST_LOAD_WAIT);
+            fetched = awaitAtMost(refetch(login, token), refresh ? REFRESH_WAIT : FIRST_LOAD_WAIT);
         } else {
             fetched = cached;
         }
