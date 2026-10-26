@@ -281,20 +281,24 @@ public final class FlowClassifier {
             reviewedAt = t.postedAt();
         }
         boolean reviewed = reviewedAt != null;
+        // A contributor's run waits for a maintainer whatever the review says: approving it stays on offer.
+        Flow.Next approve = GitHub.AWAITING_APPROVAL.equals(i.ci()) ? new Flow.Next("ci-approve", "Approve CI run") : null;
         if (reviewed && c.sinceReview() != null) {
             boolean commits = c.sinceReview().startsWith("New commits");
             return flow("review", REVIEW_STEPS, 0, Flow.YOU, i.updatedAt(), c.sinceReview() + ".",
                     commits ? new Flow.Next("review", "Review again") : new Flow.Next("whats-new", "What's new"),
-                    commits ? List.of(new Flow.Next("whats-new", "What's new")) : List.of(new Flow.Next("review", "Review again")));
+                    present(approve, commits ? new Flow.Next("whats-new", "What's new") : new Flow.Next("review", "Review again")));
         }
         if (!reviewed && !Boolean.TRUE.equals(i.approved())) {
-            List<Flow.Next> more = new ArrayList<>();
-            if (GitHub.AWAITING_APPROVAL.equals(i.ci())) more.add(new Flow.Next("ci-approve", "Approve CI run"));
             return flow("review", REVIEW_STEPS, 0, Flow.YOU, i.updatedAt(),
                     Boolean.TRUE.equals(i.draft()) ? "A draft PR, not reviewed yet." : "Not reviewed yet.",
-                    new Flow.Next("review", "Review"), more);
+                    new Flow.Next("review", "Review"), present(approve));
         }
         if (!Boolean.TRUE.equals(i.approved())) {
+            if (approve != null) {
+                return flow("review", REVIEW_STEPS, 1, Flow.YOU, i.updatedAt(), "Reviewed. CI waits for a maintainer to approve the run.",
+                        approve, List.of(new Flow.Next("whats-new", "What's new"), new Flow.Next("review", "Review again")));
+            }
             return flow("review", REVIEW_STEPS, 1, Flow.OTHERS, reviewedAt != null ? reviewedAt : i.updatedAt(),
                     "Reviewed. Waiting on the author" + waited(i, c) + ".", null,
                     List.of(new Flow.Next("whats-new", "What's new"), new Flow.Next("review", "Review again")));

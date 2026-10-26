@@ -3,6 +3,10 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.7.4
+
+- Fixed: Approve CI run is offered on a contributor's PR after you've reviewed it, too, not only before.
+
 ## 1.7.3
 
 - Fixed: Refresh no longer fails when GitHub is slow to answer on a big board. It now waits up to 4 minutes.

@@ -274,6 +274,20 @@ class FlowClassifierTest {
                 ctx(null, null, null, reviewed, List.of())), Flow.YOU, 2, "ci-why");
     }
 
+    @Test
+    void aContributorsRunCanBeApprovedAfterYourReviewToo() {
+        Item waits = pr2("someone", GitHub.AWAITING_APPROVAL, "DIRTY", "CONFLICTING", false, false, "CHANGES_REQUESTED");
+        Instant reviewed = NOW.minusSeconds(86_400);
+        // They pushed since you asked for changes: review again, or approve the run first.
+        Flow pushed = FlowClassifier.flow("review", waits, ctx(null, null, "New commits since your review", reviewed, List.of()));
+        is(pushed, Flow.YOU, 0, "review");
+        assertTrue(ids(pushed.more()).contains("ci-approve"));
+        // Nothing new since your review, but the run still waits for you.
+        is(FlowClassifier.flow("review", waits, ctx(null, null, null, reviewed, List.of())), Flow.YOU, 1, "ci-approve");
+        // Not reviewed yet: as before.
+        assertTrue(ids(FlowClassifier.flow("review", waits, ctx()).more()).contains("ci-approve"));
+    }
+
     // ---- issues ----
 
     @Test
