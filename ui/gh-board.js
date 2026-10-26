@@ -118,16 +118,16 @@ class GhBoard extends LitElement {
         _error: { state: true },
         _rowError: { state: true },   // {key, text}: a step that failed, shown on its row
         _open: { state: true },
-        _doing: { state: true },
+        _doing: { state: true },         // "key step" of each row step running: a Set, so other rows stay clickable
         _watching: { state: true },
-        _closing: { state: true },
+        _closing: { state: true },       // the items being closed: a Set
         _confirmClose: { state: true },
         _moreFor: { state: true },
         _mergeAnyway: { state: true },
         /** What the open row shows under it: thread (the agent), review (Read the review) or activity (What's new). */
         _panel: { state: true },
-        _ignoring: { state: true },
-        _moving: { state: true },        // the item going to Later or back to Your move
+        _ignoring: { state: true },      // the items being ignored or brought back: a Set
+        _moving: { state: true },        // the items going to Later or back to Your move: a Set
         _unfolded: { state: true },
         _filter: { state: true },
     };
@@ -289,15 +289,16 @@ class GhBoard extends LitElement {
         this._board = lastBoard;
         this._loading = !lastBoard;
         this._open = null;
-        this._doing = null;
+        this._doing = new Set();
         this._watching = null;
-        this._closing = null;
+        this._closing = new Set();
         this._confirmClose = null;
         this._moreFor = null;
         this._mergeAnyway = null;
         this._panel = 'thread';
-        this._ignoring = null;
-        this._moving = null;
+        this._ignoring = new Set();
+        this._moving = new Set();
+        this._pending = new Map();       // item key -> the change a click makes to the board, until the elf has made it
         this._unfolded = new Set();
         this._filter = filter ?? { text: '', tags: new Set() };
         if (!filter) loadFilter().then(f => { if (!filter) { filter = f; this._filter = f; } });
@@ -381,12 +382,43 @@ class GhBoard extends LitElement {
     }
 
     _setBoard(b) {
+        for (const change of this._pending.values()) {
+            if (b) b = change({ ...b, flows: { ...b.flows }, lanes: b.lanes.map(l => ({ ...l })) });
+        }
         rememberLinks(b?.linkedPrs);
         this._board = b;
         setLastBoard(b);
     }
 
     // ---- actions ----
+
+    /** {@code set} with {@code key} added or taken out, as a new Set, so the row redraws. */
+    static _with(set, key, on) {
+        const next = new Set(set);
+        on ? next.add(key) : next.delete(key);
+        return next;
+    }
+
+    /** A step of this row is running: its other steps wait, other rows don't. */
+    _rowBusy(key) {
+        for (const d of this._doing) if (d.startsWith(`${key} `)) return true;
+        return false;
+    }
+
+    /**
+     * The board as it will be once the elf has done what you clicked on {@code key}, shown at once: the elf does it
+     * in the background. Until it has, the change stays on every board read (another click may land first); then
+     * the board is read again, as the elf left it (as it was, if it couldn't).
+     */
+    _optimistic(key, change) {
+        this._pending.set(key, change);
+        if (this._board) this._setBoard(this._board);
+    }
+
+    async _settled(key) {
+        this._pending.delete(key);
+        await this._reloadNow();
+    }
 
     /** Runs a row's step. Agent steps leave the row showing the agent at work; nothing navigates. */
     async _run(item, next) {
@@ -396,35 +428,41 @@ class GhBoard extends LitElement {
             this._rowError = { key: item.key, text: `${next.label}: the GitHub elf was updated since this tab loaded. Reload the page, then try again.` };
             return;
         }
-        this._doing = `${item.key} ${next.id}`;
+        const doing = `${item.key} ${next.id}`;
+        this._doing = GhBoard._with(this._doing, doing, true);
         this._error = null;
-        this._rowError = null;
+        if (this._rowError?.key === item.key) this._rowError = null;
         try {
             const r = await call(item.key, next);
             if (next.id === 'ready' && r) rememberItem(r);
-            this._moreFor = null;
+            if (this._moreFor === item.key) this._moreFor = null;
             await this._reloadNow();
         } catch (e) {
             // On the row, where you clicked: the top of the board may be far out of view. Cancel in the desk's bar
             // sent nothing, so there's nothing to say.
             if (!cancelled(e)) this._rowError = { key: item.key, text: `${next.label}: ${errorMessage(e)}` };
         } finally {
-            this._doing = null;
+            this._doing = GhBoard._with(this._doing, doing, false);
         }
     }
 
+    /** Ignore moves the row to Ignored at once (and Stop ignoring takes it out), while the elf keeps it. */
     async _ignore(item, ignore) {
-        this._ignoring = item.key;
+        this._ignoring = GhBoard._with(this._ignoring, item.key, true);
         this._error = null;
+        if (this._moreFor === item.key) this._moreFor = null;
+        if (this._open === item.key) this._open = null;
+        if (ignore) {
+            this._optimistic(item.key, b => ({ ...b, lanes: b.lanes.map(l => ({ ...l, items: l.items.filter(i => i.key !== item.key) })),
+                ignored: [item, ...b.ignored.filter(i => i.key !== item.key)] }));
+        }
         try {
             await act(ignore ? 'ignore' : 'unignore', { itemKey: item.key });
-            this._moreFor = null;
-            if (this._open === item.key) this._open = null;
-            this._setBoard(await board());
         } catch (e) {
             this._error = `Couldn't ${ignore ? 'ignore' : 'stop ignoring'} ${item.key}: ${errorMessage(e)}`;
         } finally {
-            this._ignoring = null;
+            this._ignoring = GhBoard._with(this._ignoring, item.key, false);
+            await this._settled(item.key);
         }
     }
 
@@ -434,30 +472,35 @@ class GhBoard extends LitElement {
         const later = f.waiting === 'later';
         const label = later ? 'Back to Your move' : 'Later: put it aside until you do something with it';
         return html`<button class="snooze ${later ? 'on' : ''}" title=${label} aria-label=${label} aria-pressed=${later ? 'true' : 'false'}
-                ?disabled=${this._moving !== null} @click=${() => this._later(item, !later)}>
-            ${this._moving === item.key ? spinner : html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                ?disabled=${this._moving.has(item.key)} @click=${() => this._later(item, !later)}>
+            ${this._moving.has(item.key) ? spinner : html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M2 7h5L2 13h5"/><path d="M9.5 3h4.5l-4.5 5H14"/></svg>`}</button>`;
     }
 
     /** Your move, but not now: under Later until you do something with it (or bring it back). */
     async _later(item, later) {
-        this._moving = item.key;
+        this._moving = GhBoard._with(this._moving, item.key, true);
         this._error = null;
+        if (this._moreFor === item.key) this._moreFor = null;
+        if (this._open === item.key) this._open = null;
+        this._optimistic(item.key, b => {
+            const f = b.flows[item.key];
+            if (f) b.flows[item.key] = { ...f, waiting: later ? 'later' : 'you' };
+            return b;
+        });
         try {
             await act(later ? 'later' : 'now', { itemKey: item.key });
-            this._moreFor = null;
-            if (this._open === item.key) this._open = null;
-            this._setBoard(await board());
         } catch (e) {
             this._error = `Couldn't move ${item.key} ${later ? 'to Later' : 'back to Your move'}: ${errorMessage(e)}`;
         } finally {
-            this._moving = null;
+            this._moving = GhBoard._with(this._moving, item.key, false);
+            await this._settled(item.key);
         }
     }
 
     async _close(item) {
-        this._closing = item.key;
+        this._closing = GhBoard._with(this._closing, item.key, true);
         this._error = null;
         try {
             await act('close', { itemKey: item.key });
@@ -467,7 +510,7 @@ class GhBoard extends LitElement {
         } catch (e) {
             if (!cancelled(e)) this._error = `Couldn't close ${item.key}: ${errorMessage(e)}`;
         } finally {
-            this._closing = null;
+            this._closing = GhBoard._with(this._closing, item.key, false);
         }
     }
 
@@ -800,8 +843,8 @@ class GhBoard extends LitElement {
             ${!merged && item.kind === 'PR' && !ids.has('whats-new') ? this._action(item, { id: 'whats-new', label: "What's new" }, false) : ''}
             ${f.role === 'involved' && !assigned ? this._action(item, { id: 'assign', label: 'Assign me' }, false) : ''}
             <a class="btn sm quiet" href=${threadHref(item.key)}>Open page</a>
-            ${!merged && !ids.has('ignore') ? html`<button class="sm quiet" ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, true)}
-                title="Someone else is handling it: move it to Ignored">${this._ignoring === item.key ? spinner : ''}Ignore</button>` : ''}
+            ${!merged && !ids.has('ignore') ? html`<button class="sm quiet" ?disabled=${this._ignoring.has(item.key)} @click=${() => this._ignore(item, true)}
+                title="Someone else is handling it: move it to Ignored">${this._ignoring.has(item.key) ? spinner : ''}Ignore</button>` : ''}
             ${!merged && !ids.has('close') ? this._closeButton(item) : ''}
             <button class="sm quiet" aria-expanded="true" aria-label="Fewer actions" @click=${() => { this._moreFor = null; }}>×</button>`;
     }
@@ -809,7 +852,7 @@ class GhBoard extends LitElement {
     /** One step as a button (or the control that runs it: merge, update branch). */
     _action(item, n, primary) {
         const cls = primary ? 'sm primary' : 'sm quiet';
-        const busy = this._doing === `${item.key} ${n.id}`;
+        const busy = this._doing.has(`${item.key} ${n.id}`);
         switch (n.id) {
             case 'open': {
                 const open = this._open === item.key && this._panel === 'thread';
@@ -833,10 +876,10 @@ class GhBoard extends LitElement {
             case 'close':
                 return html`<button class=${cls} @click=${() => { this._confirmClose = item.key; }}>${n.label}</button>`;
             case 'ignore':
-                return html`<button class=${cls} ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, true)}>
-                    ${this._ignoring === item.key ? spinner : ''}${n.label}</button>`;
+                return html`<button class=${cls} ?disabled=${this._ignoring.has(item.key)} @click=${() => this._ignore(item, true)}>
+                    ${this._ignoring.has(item.key) ? spinner : ''}${n.label}</button>`;
             default:
-                return html`<button class=${cls} ?disabled=${this._doing !== null}
+                return html`<button class=${cls} ?disabled=${this._rowBusy(item.key)}
                     @click=${() => this._run(item, n)}>${busy ? spinner : ''}${n.label}</button>`;
         }
     }
@@ -851,14 +894,14 @@ class GhBoard extends LitElement {
         const label = `${n} commit${n === 1 ? '' : 's'}`;
         const squashable = n > 1 && !isDependabot(item) && f.waiting !== 'agent' && (f.role === 'mine' || item.canWrite);
         if (!squashable) return html`<span class="chip commits">${label}</span>`;
-        const busy = this._doing === `${item.key} squash`;
-        return html`<button class="chip commits squash" ?disabled=${this._doing !== null}
+        const busy = this._doing.has(`${item.key} squash`);
+        return html`<button class="chip commits squash" ?disabled=${this._rowBusy(item.key)}
                 title="Squash into one commit on its base. You confirm the push." @click=${() => this._squash(item)}>
             ${busy ? spinner : ''}${label}<span aria-hidden="true">Squash to 1</span></button>`;
     }
 
     async _squash(item) {
-        this._doing = `${item.key} squash`;
+        this._doing = GhBoard._with(this._doing, `${item.key} squash`, true);
         this._rowError = null;
         try {
             await squash(item.key);
@@ -870,7 +913,7 @@ class GhBoard extends LitElement {
         } catch (e) {
             if (!cancelled(e)) this._rowError = { key: item.key, text: `Squash: ${errorMessage(e)}` };
         } finally {
-            this._doing = null;
+            this._doing = GhBoard._with(this._doing, `${item.key} squash`, false);
         }
     }
 
@@ -886,9 +929,9 @@ class GhBoard extends LitElement {
         if (this._confirmClose === item.key) {
             return html`<span class="confirm-close" role="group" aria-label="Confirm close">
                 Close this ${what} on GitHub?
-                <button class="sm danger" ?disabled=${this._closing !== null} @click=${() => this._close(item)}>
-                    ${this._closing === item.key ? spinner : ''}Close ${what}</button>
-                <button class="sm quiet" ?disabled=${this._closing !== null} @click=${() => { this._confirmClose = null; }}>Keep open</button>
+                <button class="sm danger" ?disabled=${this._closing.has(item.key)} @click=${() => this._close(item)}>
+                    ${this._closing.has(item.key) ? spinner : ''}Close ${what}</button>
+                <button class="sm quiet" ?disabled=${this._closing.has(item.key)} @click=${() => { this._confirmClose = null; }}>Keep open</button>
             </span>`;
         }
         return html`<button class="sm quiet" @click=${() => { this._confirmClose = item.key; }}>Close</button>`;
@@ -933,8 +976,8 @@ class GhBoard extends LitElement {
                     <summary>${count(ignored.length, 'ignored item')}, handled by someone else</summary>
                     <div class="panel">
                         <ul>${ignored.map(item => this._renderItem(item, itemChips(item), html`
-                            <button class="sm" ?disabled=${this._ignoring !== null} @click=${() => this._ignore(item, false)}>
-                                ${this._ignoring === item.key ? spinner : ''}Stop ignoring</button>`))}
+                            <button class="sm" ?disabled=${this._ignoring.has(item.key)} @click=${() => this._ignore(item, false)}>
+                                ${this._ignoring.has(item.key) ? spinner : ''}Stop ignoring</button>`))}
                         </ul>
                     </div>
                 </details>

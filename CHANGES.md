@@ -3,6 +3,15 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.8.0
+
+- Quicker: a refresh no longer holds up your clicks. It used to keep everything waiting while it asked GitHub (a minute
+  or two); now only the last second or so.
+- Later and Ignore move the row at once, and you can go on to the next row straight away: a click on one row no
+  longer greys out the same button on every other row.
+- Next: on an item's page, a link to the next item in Your move, so you can go through them without going back to the
+  board.
+
 ## 1.7.4
 
 - Fixed: Approve CI run is offered on a contributor's PR after you've reviewed it, too, not only before.

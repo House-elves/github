@@ -163,7 +163,8 @@ public class BoardService {
 
     /** What a fetch shows, without keeping it or bringing back ignored items: the elf's dry run. */
     public Board preview(String login, String token) {
-        return classify(fetchNow(login, token, false), false);
+        // A dry run: what it found is shown, not kept.
+        return classify(read(login, token).fetched(), false);
     }
 
     private Board classify(BoardClassifier.Fetched fetched, boolean refreshing) {
@@ -342,11 +343,7 @@ public class BoardService {
     CompletableFuture<BoardClassifier.Fetched> refetch(String login, String token) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                BoardClassifier.Fetched fresh = fetchNow(login, token, true);
-                cache.put(login, fresh);
-                save(login);
-                live.boardUpdated();
-                return fresh;
+                return keep(read(login, token));
             } catch (RuntimeException e) {
                 LOG.warnf("Fetching the board for %s failed: %s", login, e.getMessage());
                 throw e;
@@ -355,11 +352,44 @@ public class BoardService {
     }
 
     /**
-     * The three searches, in parallel.
-     *
-     * @param bringBack ignored items with new activity for you come back (false: a dry run, which keeps nothing)
+     * What a refresh read from GitHub, none of it kept yet: the board's items, the ignored items with new activity
+     * for you ({@code back}), what moved since your reviews, the PRs' heads, and the PRs linked to issues (null if
+     * that failed). Read without the elf's lock, which a click waits for; {@link #keep} keeps it, under the lock.
      */
-    private BoardClassifier.Fetched fetchNow(String login, String token, boolean bringBack) {
+    public record Fetch(BoardClassifier.Fetched fetched, Map<String, String> back, Map<String, String> sinceReview,
+            Map<String, Instant> reviewedAt, Map<String, GitHub.Feedback> feedback, Map<String, String> heads,
+            Map<String, List<GitHub.LinkedPr>> linkedPrs) {
+    }
+
+    /** The refresh's read of GitHub, up to its wait: nothing changes here, so it runs without the elf's lock. */
+    public Fetch fetch(String login, String token) {
+        return awaitAtMost(async(() -> read(login, token)), REFRESH_WAIT);
+    }
+
+    /** Keeps what a refresh read: the board as the cache has it from now on, under the elf's lock. */
+    public Board board(Fetch f) {
+        load();
+        return classify(keep(f), false);
+    }
+
+    private BoardClassifier.Fetched keep(Fetch f) {
+        String login = f.fetched().login();
+        f.back().forEach(ignores::bringBack);
+        sinceReview.put(login, f.sinceReview());
+        reviewedAt.put(login, f.reviewedAt());
+        feedback.put(login, f.feedback());
+        // Dependabot's rebase is done once the head moved.
+        Map<String, Board.Rebase> asked = rebasing.get(login);
+        if (asked != null) asked.entrySet().removeIf(e -> !e.getValue().sha().equals(f.heads().get(e.getKey())));
+        if (f.linkedPrs() != null) linkedPrs.put(login, f.linkedPrs());
+        cache.put(login, f.fetched());
+        save(login);
+        live.boardUpdated();
+        return f.fetched();
+    }
+
+    /** The three searches, in parallel, and the PRs' details: what GitHub says now, nothing kept. */
+    private Fetch read(String login, String token) {
         Instant now = clock.instant();
         var involved = async(() -> github.search(token, "is:open involves:@me archived:false sort:updated-desc",
                 MAX_INVOLVED));
@@ -372,9 +402,9 @@ public class BoardService {
         List<String> maintainedRepos = settings.alwaysInvolved();
         var maintained = async(() -> maintained(token, maintainedRepos));
         // Ignored items come back when someone requests your review or mentions you after you ignored them.
+        Map<String, String> back = Map.of();
         try {
-            Map<String, String> back = github.activityForMe(token, login, ignores.ignoredSince());
-            if (bringBack) back.forEach((key, reason) -> ignores.bringBack(key, reason));
+            back = github.activityForMe(token, login, ignores.ignoredSince());
         } catch (Exception e) {
             LOG.warnf("Checking ignored items for new activity failed: %s", e.getMessage());
         }
@@ -398,37 +428,26 @@ public class BoardService {
         } catch (Exception e) {
             LOG.warnf("Reading PR merge states failed: %s", e.getMessage());
         }
-        if (!bringBack) {
-            // A dry run: what it found is shown, not kept.
-            return new BoardClassifier.Fetched(login, now, enrich(inv.items(), details), enrich(rev.items(), details),
-                    enrich(done.items(), details), truncated);
-        }
-        sinceReview.put(login, sinceYourReview(login, details, inv.items(), rev.items(), done.items()));
         Map<String, Instant> reviewTimes = new HashMap<>();
         details.forEach((key, d) -> {
             if (d.myReviewAt() != null) reviewTimes.put(key, d.myReviewAt());
         });
-        reviewedAt.put(login, reviewTimes);
         Map<String, GitHub.Feedback> said = new HashMap<>();
         details.forEach((key, d) -> {
             if (d.feedback() != null) said.put(key, d.feedback());
         });
-        feedback.put(login, said);
-        // Dependabot's rebase is done once the head moved.
-        Map<String, Board.Rebase> asked = rebasing.get(login);
-        if (asked != null) {
-            Map<String, String> heads = new HashMap<>();
-            java.util.stream.Stream.of(inv.items(), rev.items(), done.items()).flatMap(List::stream)
-                    .filter(i -> i.headSha() != null).forEach(i -> heads.putIfAbsent(i.key(), i.headSha()));
-            asked.entrySet().removeIf(e -> !e.getValue().sha().equals(heads.get(e.getKey())));
-        }
+        Map<String, String> heads = new HashMap<>();
+        java.util.stream.Stream.of(inv.items(), rev.items(), done.items()).flatMap(List::stream)
+                .filter(i -> i.headSha() != null).forEach(i -> heads.putIfAbsent(i.key(), i.headSha()));
+        Map<String, List<GitHub.LinkedPr>> linked = null;
         try {
-            linkedPrs.put(login, await(links));
+            linked = await(links);
         } catch (Exception e) {
             LOG.warnf("Looking for PRs linked to issues failed: %s", e.getMessage());
         }
-        return new BoardClassifier.Fetched(login, now, enrich(inv.items(), details), enrich(rev.items(), details),
-                enrich(done.items(), details), truncated);
+        return new Fetch(new BoardClassifier.Fetched(login, now, enrich(inv.items(), details), enrich(rev.items(), details),
+                enrich(done.items(), details), truncated), back, sinceYourReview(login, details, inv.items(), rev.items(),
+                done.items()), reviewTimes, said, heads, linked);
     }
 
     /** GitHub's search query is at most 256 characters, so a long list of repos goes in several searches. */

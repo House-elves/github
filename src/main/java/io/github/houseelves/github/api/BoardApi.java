@@ -80,9 +80,20 @@ public class BoardApi {
      * merge on green once (what the desk did every minute).
      */
     public Board refresh() {
+        return refresh(fetch());
+    }
+
+    /** The refresh's read of GitHub, which takes the longest: nothing changes, so the elf runs it without its lock. */
+    public BoardService.Fetch fetch() {
+        return boards.fetch(login, token());
+    }
+
+    /** The rest of the refresh, under the elf's lock: keeps what {@link #fetch} read, then agents and merges. */
+    public Board refresh(BoardService.Fetch fetched) {
         threads.takeIn();
         merges.poll(token());
-        return board(true);
+        return boards.board(fetched).with(threads.summaries(), merges.recent(), true)
+                .withFlows(java.time.Instant.now()).later(later.keys());
     }
 
     // ---- threads ----

@@ -126,6 +126,23 @@ class BoardServiceTest {
     }
 
     @Test
+    void aRefreshReadsGitHubFirstAndKeepsItOnlyInTheLockedStep() {
+        involvedReturns(pr("quarkusio/quarkus", 1, "someone"));
+        when(github.activityForMe(anyString(), eq("me"), org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(Map.of("quarkusio/quarkus#2", "mentioned you"));
+        BoardService.Fetch f = service.fetch("me", "token");
+        // Read, nothing kept: no cache file, nobody brought back, no open page told.
+        assertFalse(again().cached("me"));
+        verify(ignores, never()).bringBack(anyString(), anyString());
+        verify(live, never()).boardUpdated();
+        // The next run (the lock taken) keeps it.
+        Board b = again().board(f);
+        assertTrue(b.lanes().stream().flatMap(l -> l.items().stream()).anyMatch(i -> i.key().equals("quarkusio/quarkus#1")));
+        assertTrue(again().cached("me"));
+        verify(ignores).bringBack("quarkusio/quarkus#2", "mentioned you");
+    }
+
+    @Test
     void aDependabotMvnpmBumpIsLeftToTheMvnpmTabWithNoSearchOfItsOwn() {
         involvedReturns(Items.pr("quarkusio/quarkus", 9, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
                 "dependabot/maven/org.mvnpm-lit-3.3.3", "abc"));

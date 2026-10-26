@@ -172,6 +172,20 @@ export function setLastBoard(b) {
     lastBoard = b;
 }
 
+/**
+ * The item after this one in Your move, as the board lists it (newest first), for the thread page's Next: or the
+ * first one, when this one isn't in Your move (any more). Null when nothing else is your move.
+ */
+export function nextYourMove(itemKey) {
+    const b = lastBoard;
+    if (!b?.flows) return null;
+    const all = b.lanes.flatMap(l => l.items).filter(i => b.flows[i.key])
+        .sort((x, y) => (b.flows[y.key].since ?? '').localeCompare(b.flows[x.key].since ?? ''));
+    const yours = i => b.flows[i.key].waiting === 'you' && i.key !== itemKey;
+    const at = all.findIndex(i => i.key === itemKey);
+    return all.slice(at + 1).find(yours) ?? all.find(yours) ?? null;
+}
+
 /** The item is in the board's Ignored. */
 export function boardIgnores(itemKey) {
     return (lastBoard?.ignored ?? []).some(i => i.key === itemKey);

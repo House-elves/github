@@ -5,7 +5,7 @@
 import { LitElement, html, css, shared, ago, markdown, markdownStyles, spinner, Ticking, copyText, elf } from '/elf-kit/1/kit.js';
 import {
     isDependabot, linksFor, prRef, threadHref, rememberItem, knownItem, kindIcon, ciFailing, ciNeedsApproval, hasConflicts,
-    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores, usd, COST_HINT } from './shared.js';
+    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores, usd, COST_HINT, nextYourMove } from './shared.js';
 import { act, agentReport, board, cancel, cancelled, errorMessage, post, squash, startAgent, thread } from './api.js';
 import './gh-description.js';
 import './merge-control.js';
@@ -67,6 +67,11 @@ class GhThread extends LitElement {
         .compact { display: grid; gap: 14px; min-width: 0; }
         .back { font-size: 14px; color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; }
         .back:hover { color: var(--ink); }
+        .top-nav { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; }
+        .next { font-size: 14px; color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; min-width: 0;
+            max-width: 100%; }
+        .next:hover { color: var(--ink); }
+        .next-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 36ch; color: var(--ink); }
         .layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 40px; align-items: start; margin-top: 18px; }
         .convo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; max-width: 780px; }
         .title-block { display: grid; gap: 8px; }
@@ -556,7 +561,10 @@ class GhThread extends LitElement {
         const url = t?.url ?? item?.url;
         const kind = t?.kind ?? item?.kind;
         return html`
-            <a class="back" href="#github">← Back to GitHub</a>
+            <nav class="top-nav" aria-label="Board">
+                <a class="back" href="#github">← Back to GitHub</a>
+                ${this._renderNext()}
+            </nav>
             <div class="layout">
                 <div class="convo">
                     <div class="title-block">
@@ -580,6 +588,14 @@ class GhThread extends LitElement {
                 ${this._loaded ? this._renderAside(t, kind, url, item) : ''}
             </div>
         `;
+    }
+
+    /** Next: the next item in Your move, so you can go on without going back to the board. */
+    _renderNext() {
+        const next = nextYourMove(this.itemKey);
+        if (!next) return '';
+        return html`<a class="next" href=${threadHref(next.key)} title=${`${next.key}: ${next.title}`}>
+            Next: <span class="next-title">${next.title}</span> →</a>`;
     }
 
     /**

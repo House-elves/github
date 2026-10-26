@@ -110,10 +110,13 @@ public class GitHubElf {
     }
 
     static int refresh(Home home, GhAccount account) throws Exception {
+        // GitHub takes a minute or two to answer for a big board: that part only reads, so clicks in the tab (which
+        // wait for the lock) don't wait for it. Keeping what it read, under the lock, is quick.
+        var fetched = Elf.real(home, account).api.fetch();
         Board b;
         try (ElfLock lock = ElfLock.take(home.state())) {
             Elf elf = Elf.real(home, account);
-            b = elf.api.refresh();
+            b = elf.api.refresh(fetched);
             Views.writeAll(elf);
         }
         System.out.println("Refreshed the board for " + account.login() + ": " + count(b) + " items"
