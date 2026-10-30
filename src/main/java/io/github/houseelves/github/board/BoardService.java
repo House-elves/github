@@ -37,7 +37,7 @@ import io.github.houseelves.github.scope.ScopeService;
 import io.github.houseelves.github.settings.Settings;
 
 /**
- * Builds the board. What GitHub said is kept in board/cache.json ({@link Cache}): the elf's refresh fetches it
+ * Builds the board. What GitHub said is kept in board/cache-{login}.json ({@link Cache}), per account: the elf's refresh fetches it
  * (on its schedule, or when you click Refresh), and everything else builds the board from it without asking
  * GitHub, so a change you make shows at once. Only the first load and a refresh wait for GitHub. The searches
  * run in parallel. Classification always reruns, so a scope change shows at once.
@@ -79,11 +79,13 @@ public class BoardService {
     /** login -> issue key -> open PRs that fix or mention it, from the last fetch. */
     private final Map<String, Map<String, List<GitHub.LinkedPr>>> linkedPrs = new ConcurrentHashMap<>();
     private final ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+    private final Path boardDir;
+    /** board/cache.json: the one account's cache, before there could be more. */
     private final Path cacheFile;
     private boolean loaded;
 
     /**
-     * board/cache.json: what this service kept in memory in the desk, for the elf's account: the last fetch, and
+     * board/cache-{login}.json: what this service kept in memory in the desk, for one account: the last fetch, and
      * what came with it.
      */
     public record Cache(BoardClassifier.Fetched fetched, Map<String, String> sinceReview, Map<String, Instant> reviewedAt,
@@ -104,15 +106,40 @@ public class BoardService {
         this.live = live;
         this.ignores = ignores;
         this.clock = clock;
+        this.boardDir = boardDir;
         this.cacheFile = boardDir.resolve("cache.json");
     }
 
-    /** The cache file, read once per run. */
+    /**
+     * The cache files, read once per run: board/cache-{login}.json for each account. A cache.json from before the
+     * board had more than one account is moved to its account's name.
+     */
     private synchronized void load() {
         if (loaded) return;
         loaded = true;
-        Cache c = Json.read(cacheFile, Cache.class, null);
-        if (c == null || c.fetched() == null) return;
+        Cache legacy = Json.read(cacheFile, Cache.class, null);
+        if (legacy != null && legacy.fetched() != null) {
+            String login = legacy.fetched().login();
+            if (!java.nio.file.Files.exists(cacheFile(login))) take(legacy);
+            save(login);
+        }
+        try {
+            java.nio.file.Files.deleteIfExists(cacheFile);
+        } catch (java.io.IOException e) {
+            LOG.warnf("Couldn't remove the old %s: %s", cacheFile, e.getMessage());
+        }
+        if (!java.nio.file.Files.isDirectory(boardDir)) return;
+        try (var files = java.nio.file.Files.list(boardDir)) {
+            for (Path f : files.filter(p -> p.getFileName().toString().matches("cache-[a-z0-9-]+\\.json")).toList()) {
+                Cache c = Json.read(f, Cache.class, null);
+                if (c != null && c.fetched() != null) take(c);
+            }
+        } catch (java.io.IOException e) {
+            LOG.warnf("Couldn't read the board's cache: %s", e.getMessage());
+        }
+    }
+
+    private void take(Cache c) {
         String login = c.fetched().login();
         cache.put(login, c.fetched());
         if (c.sinceReview() != null) sinceReview.put(login, c.sinceReview());
@@ -122,13 +149,29 @@ public class BoardService {
         if (c.linkedPrs() != null) linkedPrs.put(login, c.linkedPrs());
     }
 
+    private Path cacheFile(String login) {
+        return boardDir.resolve("cache-" + login.toLowerCase(Locale.ROOT) + ".json");
+    }
+
     /** Writes the cache file for {@code login}. */
     private synchronized void save(String login) {
         BoardClassifier.Fetched f = cache.get(login);
         if (f == null) return;
-        Json.write(cacheFile, new Cache(f, sinceReview.getOrDefault(login, Map.of()), reviewedAt.getOrDefault(login, Map.of()),
+        Json.write(cacheFile(login), new Cache(f, sinceReview.getOrDefault(login, Map.of()), reviewedAt.getOrDefault(login, Map.of()),
                 feedback.getOrDefault(login, Map.of()), Map.copyOf(rebasing.getOrDefault(login, Map.of())),
                 linkedPrs.getOrDefault(login, Map.of())));
+    }
+
+    /** An account taken off the board: what was fetched for it goes, so its items leave the board. */
+    public synchronized void drop(String login) {
+        load();
+        for (Map<String, ?> m : List.of(cache, sinceReview, reviewedAt, feedback, rebasing, linkedPrs)) m.remove(login);
+        try {
+            java.nio.file.Files.deleteIfExists(cacheFile(login));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("Couldn't remove " + cacheFile(login), e);
+        }
+        live.boardUpdated();
     }
 
     /** Something is cached for {@code login}: the board can be built without asking GitHub. */

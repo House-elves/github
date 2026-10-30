@@ -22,7 +22,9 @@ import io.github.houseelves.github.thread.ThreadStore;
 public class Elf {
 
     public final Home home;
+    /** The account it was put together as: GITHUB_ACCOUNT. What's done is done as {@link #accounts}' acting one. */
     public final String login;
+    public final Accounts accounts;
     public final Live live = new Live();
     public final ThreadStore store;
     public final ScopeService scopes;
@@ -40,15 +42,21 @@ public class Elf {
     public final ConflictService conflicts;
     public final BoardApi api;
 
-    /** The real thing: GitHub with the account's token. */
-    public static Elf real(Home home, GhAccount account) {
-        Supplier<String> token = account::token;
-        return new Elf(home, account.login(), token, new GitHub(new HttpGitHubApi()), new GitHubWriter(account.login(), token));
+    /** The real thing: GitHub with each account's token, from gh. */
+    public static Elf real(Home home, String primary) {
+        Accounts accounts = Accounts.real(home, primary);
+        return new Elf(home, accounts, new GitHub(new HttpGitHubApi()), new GitHubWriter(accounts::login, accounts::token));
     }
 
+    /** One account, with this token: the tests'. */
     public Elf(Home home, String login, Supplier<String> token, GitHub github, GitHubWriter writer) {
+        this(home, new Accounts(home.state(), login, l -> token.get()), github, writer);
+    }
+
+    public Elf(Home home, Accounts accounts, GitHub github, GitHubWriter writer) {
         this.home = home;
-        this.login = login;
+        this.login = accounts.primary();
+        this.accounts = accounts;
         this.github = github;
         this.writer = writer;
         this.store = new ThreadStore(home.state());
@@ -63,7 +71,7 @@ public class Elf {
         this.merges = new MergeService(home.state(), github, writer, store, live);
         this.ci = new CiService(github, writer, threads, store, live);
         this.conflicts = new ConflictService(github, writer, threads, store, live);
-        this.api = new BoardApi(login, token, boards, scopes, settings, threads, poster, merges, ci,
+        this.api = new BoardApi(accounts, boards, scopes, settings, threads, poster, merges, ci,
                 github, conflicts, ignores, later, live);
     }
 }

@@ -7,15 +7,24 @@
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
 import io.github.houseelves.github.api.Actions;
 import io.github.houseelves.github.board.Board;
+import io.github.houseelves.github.board.BoardService;
 import io.github.houseelves.github.elf.Config;
 import io.github.houseelves.github.elf.Elf;
 import io.github.houseelves.github.elf.ElfLock;
-import io.github.houseelves.github.elf.GhAccount;
 import io.github.houseelves.github.elf.Home;
 import io.github.houseelves.github.elf.Import;
 import io.github.houseelves.github.elf.Json;
@@ -24,7 +33,8 @@ import io.github.houseelves.github.github.Item;
 
 /**
  * The GitHub elf: Elf Desk's GitHub board, run by the House Elves runner. It works as the gh account in
- * GITHUB_ACCOUNT (~/.config/github/config), keeps the board and its threads in ~/.config/github/, and draws the
+ * GITHUB_ACCOUNT (~/.config/github/config) and any more you add in its settings (each item as the one that found
+ * it), keeps the board and its threads in ~/.config/github/, and draws the
  * desk's GitHub tab from them.
  *
  * <pre>
@@ -78,10 +88,10 @@ public class GitHubElf {
         Home home = Home.user();
         try {
             if (importFrom != null) return importDesk(home, Path.of(importFrom));
-            GhAccount account = new GhAccount(Config.load(home.config()).githubAccount());
-            if (dryRun) return dryRun(Elf.real(home, account), account);
-            if (refresh) return refresh(home, account);
-            return action(home, account, action);
+            String primary = Config.load(home.config()).githubAccount();
+            if (dryRun) return dryRun(Elf.real(home, primary));
+            if (refresh) return refresh(home, primary);
+            return action(home, primary, action);
         } catch (Exception e) {
             if (System.getenv("GITHUB_ELF_DEBUG") != null) e.printStackTrace();
             String message = e.getMessage() == null ? e.toString() : e.getMessage();
@@ -91,49 +101,74 @@ public class GitHubElf {
     }
 
     /** One action: its values on stdin, its answer as the last line on stdout. */
-    static int action(Home home, GhAccount account, String name) throws Exception {
+    static int action(Home home, String primary, String name) throws Exception {
         String stdin = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
         JsonNode params = Json.MAPPER.readTree(stdin.isBlank() ? "{}" : stdin);
         if (Actions.READS.contains(name)) {
-            Elf elf = Elf.real(home, account);
-            print(new Actions(elf, account::token).run(name, params));
+            Elf elf = Elf.real(home, primary);
+            print(new Actions(elf, elf.accounts::token).run(name, params));
             return 0;
         }
         JsonNode answer;
         try (ElfLock lock = ElfLock.take(home.state())) {
-            Elf elf = Elf.real(home, account);
-            answer = new Actions(elf, account::token).run(name, params);
+            Elf elf = Elf.real(home, primary);
+            answer = new Actions(elf, elf.accounts::token).run(name, params);
             Views.write(elf);
         }
         print(answer);
         return 0;
     }
 
-    static int refresh(Home home, GhAccount account) throws Exception {
+    static int refresh(Home home, String primary) throws Exception {
         // GitHub takes a minute or two to answer for a big board: that part only reads, so clicks in the tab (which
-        // wait for the lock) don't wait for it. Keeping what it read, under the lock, is quick.
-        var fetched = Elf.real(home, account).api.fetch();
+        // wait for the lock) don't wait for it. Each account is read at the same time. Keeping what they read, under
+        // the lock, is quick.
+        Elf reader = Elf.real(home, primary);
+        List<String> logins = reader.accounts.logins();
+        Map<String, Future<BoardService.Fetch>> reads = new LinkedHashMap<>();
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (String l : logins) reads.put(l, pool.submit(() -> reader.boards.fetch(l, reader.accounts.token(l))));
+        }
+        List<BoardService.Fetch> fetched = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
+        for (var r : reads.entrySet()) {
+            try {
+                fetched.add(r.getValue().get());
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause() == null ? e : e.getCause();
+                // One account can't be read (gh logged out of it, say): the others' items still refresh.
+                if (logins.size() == 1) throw cause instanceof Exception ex ? ex : new IllegalStateException(cause);
+                failed.add(r.getKey() + " (" + cause.getMessage() + ")");
+            }
+        }
+        if (fetched.isEmpty()) throw new IllegalStateException("Couldn't read GitHub as " + String.join(", ", failed));
         Board b;
         try (ElfLock lock = ElfLock.take(home.state())) {
-            Elf elf = Elf.real(home, account);
+            Elf elf = Elf.real(home, primary);
             b = elf.api.refresh(fetched);
             Views.writeAll(elf);
         }
-        System.out.println("Refreshed the board for " + account.login() + ": " + count(b) + " items"
-                + (b.truncated() ? " (GitHub had more than one search returns)" : "") + ".");
+        System.out.println("Refreshed the board for " + fetched.stream().map(f -> f.fetched().login())
+                .collect(Collectors.joining(", ")) + ": " + count(b) + " items"
+                + (b.truncated() ? " (GitHub had more than one search returns)" : "") + "."
+                + (failed.isEmpty() ? "" : " Couldn't read GitHub as " + String.join(", ", failed) + "."));
         return 0;
     }
 
-    static int dryRun(Elf elf, GhAccount account) {
-        Board b = elf.boards.preview(elf.login, account.token());
-        StringBuilder sb = new StringBuilder("The board for " + elf.login + " as GitHub has it now:\n");
-        for (Board.Lane lane : b.lanes()) {
-            sb.append("\n").append(lane.title()).append(" (").append(lane.items().size()).append(")\n");
-            for (Item i : lane.items()) sb.append("  ").append(i.key()).append("  ").append(i.title()).append('\n');
+    static int dryRun(Elf elf) {
+        StringBuilder sb = new StringBuilder();
+        for (String login : elf.accounts.logins()) {
+            Board b = elf.boards.preview(login, elf.accounts.token(login));
+            sb.append("The board for ").append(login).append(" as GitHub has it now:\n");
+            for (Board.Lane lane : b.lanes()) {
+                sb.append("\n").append(lane.title()).append(" (").append(lane.items().size()).append(")\n");
+                for (Item i : lane.items()) sb.append("  ").append(i.key()).append("  ").append(i.title()).append('\n');
+            }
+            sb.append("\nhidden: ").append(b.hidden().size())
+                    .append(", ignored: ").append(b.ignored().size()).append(b.scopeEmpty() ? " (nothing watched yet)" : "")
+                    .append("\n\n");
         }
-        sb.append("\nhidden: ").append(b.hidden().size())
-                .append(", ignored: ").append(b.ignored().size()).append(b.scopeEmpty() ? " (nothing watched yet)" : "")
-                .append("\n\nDry run: nothing was written.");
+        sb.append("Dry run: nothing was written.");
         System.out.println(sb);
         return 0;
     }

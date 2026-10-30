@@ -13,6 +13,8 @@ import io.github.houseelves.github.agent.AgentOutput;
 import io.github.houseelves.github.elf.Elf;
 import io.github.houseelves.github.elf.Home;
 import io.github.houseelves.github.elf.Json;
+import io.github.houseelves.github.thread.DeskThread;
+import io.github.houseelves.github.thread.Draft;
 import io.github.houseelves.github.thread.Poster;
 
 /**
@@ -54,6 +56,13 @@ public class Actions {
     /** Runs one action. Throws with a message for the tab when it can't. */
     public JsonNode run(String action, JsonNode params) {
         JsonNode p = params == null || params.isNull() ? mapper.createObjectNode() : params;
+        // Done as the account the item belongs to: the one that found it.
+        elf.accounts.actFor(itemOf(p));
+        // What the desk's bar said it's done as must be who does it.
+        if (p.path("as").isTextual() && !p.path("as").asText().equalsIgnoreCase(elf.accounts.login())) {
+            throw new IllegalArgumentException("That's " + elf.accounts.login() + "'s now, not " + p.path("as").asText()
+                    + "'s: nothing was done. Refresh the board and try again.");
+        }
         BoardApi api = elf.api;
         Object answer = switch (action) {
             // reads
@@ -102,6 +111,9 @@ public class Actions {
             case "remove" -> api.remove(p.path("id").asLong());
             case "add-always-involved" -> api.addAlwaysInvolved(text(p, "repo"));
             case "remove-always-involved" -> api.removeAlwaysInvolved(text(p, "repo"));
+            case "add-account" -> api.addAccount(text(p, "login"), p.path("name").asText(""));
+            case "rename-account" -> api.renameAccount(text(p, "login"), text(p, "name"));
+            case "remove-account" -> api.removeAccount(text(p, "login"));
             case "set-refresh-minutes" -> api.setRefreshMinutes(p.path("minutes").asInt());
             case "seen" -> api.seen(key(p));
             case "post-done" -> api.postDone(p.path("draftId").asLong(), p.path("status").asInt(), p.path("error").asText(null));
@@ -196,6 +208,17 @@ public class Actions {
         } catch (java.io.IOException e) {
             throw new IllegalStateException("The runner's squash isn't there any more. Squash it again.");
         }
+    }
+
+    /** The item an action is about: its itemKey, or the item of the draft it names. Null for the board's settings. */
+    String itemOf(JsonNode p) {
+        if (p.path("itemKey").isTextual()) return p.path("itemKey").asText();
+        if (p.path("draftId").canConvertToLong()) {
+            Draft d = elf.store.draft(p.path("draftId").asLong());
+            DeskThread t = d == null ? null : elf.store.thread(d.threadId);
+            if (t != null) return t.itemKey;
+        }
+        return null;
     }
 
     private static String key(JsonNode p) {

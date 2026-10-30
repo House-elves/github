@@ -3,6 +3,14 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.9.0
+
+- More than one GitHub account: add them under **Accounts** in the board's Settings, each with a name you give it
+  (Work, Personal). Each must be logged in to `gh` on this machine. The board shows what involves any of them, once.
+- Each item is tagged with its account's name (and +1 when another account has it too). Filter by account next to the
+  tags, or type the name in the filter.
+- What you click is done as the account the item belongs to, and the desk's bar says which ("..., as phillip-kruger?").
+
 ## 1.8.0
 
 - Quicker: a refresh no longer holds up your clicks. It used to keep everything waiting while it asked GitHub (a minute

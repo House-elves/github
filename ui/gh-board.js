@@ -4,7 +4,8 @@
 import { LitElement, html, css, shared, ago, spinner, Ticking, count, elf } from '/elf-kit/1/kit.js';
 import {
     linkedPrChips, rememberLinks, itemChips, ciFailing, hasConflicts, mergeableAnyway, kindIcon, threadHref, rememberItem,
-    settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline, usd, COST_HINT } from './shared.js';
+    settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline, usd, COST_HINT,
+    accountsOf, loginFor, accountName, manyAccounts, isMine } from './shared.js';
 import { act, board, cancelled, errorMessage, squash, startAgent } from './api.js';
 import './merge-control.js';
 import './ci-menu.js';
@@ -36,8 +37,8 @@ function roleTag(item, role) {
 }
 
 /**
- * The board's filter: the text, and the tags picked. The tab's frame has no storage of its own, so the desk keeps it
- * in this browser (elf.store), and this frame keeps it while it's open.
+ * The board's filter: the text, the tags picked, and the accounts picked (logins). The tab's frame has no storage of
+ * its own, so the desk keeps it in this browser (elf.store), and this frame keeps it while it's open.
  */
 const FILTER = 'board-filter';
 let filter = null;
@@ -45,19 +46,24 @@ let filter = null;
 async function loadFilter() {
     try {
         const f = JSON.parse((await elf.store.get(FILTER)) ?? 'null');
-        return { text: f?.text ?? '', tags: new Set(f?.tags ?? []) };
-    } catch { return { text: '', tags: new Set() }; }
+        return { text: f?.text ?? '', tags: new Set(f?.tags ?? []), accounts: new Set(f?.accounts ?? []) };
+    } catch { return { text: '', tags: new Set(), accounts: new Set() }; }
 }
 
 /**
- * Whether an item passes the filter: every word of the text is in its title, repo, number, tag or author, and
- * its tag is one of those picked (when any are). Items with no tag (not watched, ignored) pass only without tags.
+ * Whether an item passes the filter: every word of the text is in its title, repo, number, tag, author or account
+ * name, its tag is one of those picked (when any are), and one of the accounts that found it is one of those picked
+ * (when any are). Items with no tag (not watched, ignored) pass only without tags.
+ *
+ * @param found the logins of the accounts that found it; names, what you call them
  */
-export function matches(item, role, filter) {
+export function matches(item, role, filter, found = [], names = []) {
     if (filter.tags.size && !filter.tags.has(role)) return false;
+    if (filter.accounts?.size && !found.some(l => filter.accounts.has(l))) return false;
     const words = filter.text.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return true;
-    const hay = [item.title, item.repo, `#${item.number}`, ROLES[role] ?? role ?? '', item.author ?? ''].join(' ').toLowerCase();
+    const hay = [item.title, item.repo, `#${item.number}`, ROLES[role] ?? role ?? '', item.author ?? '', ...names]
+        .join(' ').toLowerCase();
     return words.every(w => hay.includes(w));
 }
 
@@ -197,6 +203,10 @@ class GhBoard extends LitElement {
         .filter .tag .n { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 2px; }
         .filter .tag[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
         .filter .tag[aria-pressed="true"] .n { color: var(--accent); }
+        .acct {
+            display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 7px; border-radius: 999px; white-space: nowrap;
+            border: 1px solid var(--line); color: var(--muted); vertical-align: 1px;
+        }
         .keys { font-size: 12px; color: var(--muted); padding: 10px 12px 0; line-height: 1.6; }
         kbd { font: 11px var(--font-code); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 
@@ -300,7 +310,7 @@ class GhBoard extends LitElement {
         this._moving = new Set();
         this._pending = new Map();       // item key -> the change a click makes to the board, until the elf has made it
         this._unfolded = new Set();
-        this._filter = filter ?? { text: '', tags: new Set() };
+        this._filter = filter ?? { text: '', tags: new Set(), accounts: new Set() };
         if (!filter) loadFilter().then(f => { if (!filter) { filter = f; this._filter = f; } });
         this._onKey = e => this._key(e);
     }
@@ -624,11 +634,26 @@ class GhBoard extends LitElement {
     _setFilter(f) {
         this._filter = f;
         filter = f;
-        elf.store.set(FILTER, JSON.stringify({ text: f.text, tags: [...f.tags] })).catch(() => { /* not kept */ });
+        elf.store.set(FILTER, JSON.stringify({ text: f.text, tags: [...f.tags], accounts: [...(f.accounts ?? [])] }))
+            .catch(() => { /* not kept */ });
     }
 
     get _filtering() {
-        return !!this._filter.text.trim() || this._filter.tags.size > 0;
+        return !!this._filter.text.trim() || this._filter.tags.size > 0 || this._accountsPicked().size > 0;
+    }
+
+    /** The accounts picked in the filter that are still on the board. */
+    _accountsPicked() {
+        const logins = new Set((this._board?.accounts ?? []).map(a => a.login));
+        return new Set([...(this._filter.accounts ?? [])].filter(l => logins.has(l)));
+    }
+
+    /** Whether an item passes the filter, with the accounts that found it and their names. */
+    _matches(item, role) {
+        const b = this._board;
+        const found = manyAccounts(b) ? accountsOf(b, item.key) : [];
+        const f = { ...this._filter, accounts: manyAccounts(b) ? this._accountsPicked() : new Set() };
+        return matches(item, role, f, found, found.map(l => accountName(b, l)));
     }
 
     /** The filter bar over the sections: words to look for, and the tags to show. */
@@ -648,7 +673,7 @@ class GhBoard extends LitElement {
                     <input type="search" id="board-filter" aria-label="Filter by title, repo, number, tag or author" .value=${f.text}
                         placeholder="Filter by title, repo, #number or author" spellcheck="false" autocomplete="off"
                         @input=${e => this._setFilter({ ...f, text: e.target.value })}
-                        @keydown=${e => { if (e.key === 'Escape') { e.preventDefault(); this._setFilter({ text: '', tags: new Set() }); } }}>
+                        @keydown=${e => { if (e.key === 'Escape') { e.preventDefault(); this._setFilter({ text: '', tags: new Set(), accounts: new Set() }); } }}>
                     <span class="end">
                         ${this._filtering ? html`<span class="count" role="status">${shown} of ${all.length}</span>` : ''}
                         ${f.text ? html`<button class="clear" aria-label="Clear the filter text"
@@ -663,12 +688,43 @@ class GhBoard extends LitElement {
                         @click=${() => toggle(t.id)}>${ROLES[t.id]} <span class="n">${t.n}</span></button>`)}
                     ${f.tags.size ? html`<button class="sm quiet" @click=${() => this._setFilter({ ...f, tags: new Set() })}>All tags</button>` : ''}
                 </div>
+                ${this._renderAccountFilter(all)}
             </div>`;
+    }
+
+    /** With more than one account: show only what one (or some) of them found. */
+    _renderAccountFilter(all) {
+        const b = this._board;
+        if (!manyAccounts(b)) return '';
+        const f = this._filter;
+        const picked = this._accountsPicked();
+        const toggle = login => {
+            const next = new Set(picked);
+            next.has(login) ? next.delete(login) : next.add(login);
+            this._setFilter({ ...f, accounts: next });
+        };
+        return html`
+            <div class="tags" role="group" aria-label="Show only the account">
+                ${b.accounts.map(a => html`<button class="sm tag account" aria-pressed=${picked.has(a.login) ? 'true' : 'false'}
+                    title=${a.name === a.login ? a.login : `${a.name} (${a.login})`} @click=${() => toggle(a.login)}>
+                    ${a.name} <span class="n">${all.filter(r => accountsOf(b, r.item.key).includes(a.login)).length}</span></button>`)}
+                ${picked.size ? html`<button class="sm quiet" @click=${() => this._setFilter({ ...f, accounts: new Set() })}>All accounts</button>` : ''}
+            </div>`;
+    }
+
+    /** Which account a row is: its name, and the others that found it too. */
+    _accountTag(item) {
+        const b = this._board;
+        if (!manyAccounts(b)) return '';
+        const [owner, ...also] = accountsOf(b, item.key);
+        if (!owner) return '';
+        const title = `As ${owner}${also.length ? `; also found by ${also.map(l => accountName(b, l)).join(', ')}` : ''}`;
+        return html`<span class="acct" title=${title}>${accountName(b, owner)}${also.length ? ` +${also.length}` : ''}</span>`;
     }
 
     _renderBoard(b) {
         const all = this._rows(b);
-        const rows = all.filter(r => matches(r.item, r.flow.role, this._filter));
+        const rows = all.filter(r => this._matches(r.item, r.flow.role));
         const by = Object.fromEntries(SECTIONS.map(s => [s.id, []]));
         rows.forEach(r => (by[r.flow.waiting] ?? by.watching).push(r));
         // Most recent first: what just changed is what you're likely to act on.
@@ -713,8 +769,8 @@ class GhBoard extends LitElement {
                 <div class="sections">
                     ${b.scopeEmpty ? '' : this._renderFilter(all, rows.length)}
                     ${SECTIONS.map(s => this._renderSection(s, by[s.id]))}
-                    ${this._renderHidden(b.hidden.filter(i => matches(i, null, this._filter)))}
-                    ${this._renderIgnored(b.ignored.filter(i => matches(i, null, this._filter)))}
+                    ${this._renderHidden(b.hidden.filter(i => this._matches(i, null)))}
+                    ${this._renderIgnored(b.ignored.filter(i => this._matches(i, null)))}
                 </div>
             </div>
         `;
@@ -751,8 +807,7 @@ class GhBoard extends LitElement {
 
     /** Who opened it, when that isn't you. */
     _authorTag(item) {
-        const me = this._board?.login?.toLowerCase();
-        if (!item.author || item.author.toLowerCase() === me) return '';
+        if (!item.author || isMine(this._board, item.author)) return '';
         return html`<a class="author" href="https://github.com/${item.author.replace(/\[bot\]$/, '')}" target="_blank"
             rel="noopener" title="Opened by ${item.author}">@${item.author}</a>`;
     }
@@ -769,6 +824,7 @@ class GhBoard extends LitElement {
                         <span class="role">${roleTag(item, f.role)}</span>
                         <a class="title" href=${item.url} target="_blank" rel="noopener">${item.title}</a>
                         ${this._authorTag(item)}
+                        ${this._accountTag(item)}
                     </div>
                     <div class="meta">
                         <span>${item.repo} #${item.number}</span>
@@ -830,7 +886,7 @@ class GhBoard extends LitElement {
         }
         const ids = new Set([f.next?.id, ...f.more.map(n => n.id)]);
         const merged = f.waiting === 'done';
-        const me = this._board.login?.toLowerCase();
+        const me = loginFor(this._board, item.key)?.toLowerCase();
         const assigned = (item.assignees ?? []).some(a => a.toLowerCase() === me);
         return html`
             ${main}
@@ -957,6 +1013,7 @@ class GhBoard extends LitElement {
                 <div class="main" style="cursor:auto">
                     <a class="title" href=${item.url} target="_blank" rel="noopener">${item.title}</a>
                     <div class="meta">
+                        ${this._accountTag(item)}
                         <span>${item.repo} #${item.number}</span>
                         ${item.author ? html`<span>by ${item.author}</span>` : ''}
                         <span>updated ${ago(item.updatedAt)}</span>

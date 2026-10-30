@@ -19,12 +19,27 @@ export function threadFile(itemKey) {
     return `${itemKey.replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
 }
 
+/** The writes to GitHub, whose confirm bar names the account they're done as ({as}). */
+const AS = new Set(['post', 'close', 'ready-for-review', 'assign-me', 're-request-review', 'ci-rerun', 'ci-approve',
+    'ci-reopen', 'ask-dependabot-to-rebase', 'update-branch', 'merge-on-green', 'merge-without-approval']);
+
+/** The account an item's writes are done as: the one that found it (the board's first), else the elf's own. */
+async function accountFor(itemKey) {
+    const b = await board().catch(() => null);
+    return b?.found?.[itemKey]?.[0] ?? b?.login ?? (await settingsView().catch(() => null))?.login;
+}
+
 /**
  * One of the elf's actions. Values that are null or missing are left out (the elf.yaml makes those optional), and
- * an answer too big for one line ({"file": name}) is read from cache/.
+ * an answer too big for one line ({"file": name}) is read from cache/. A write to GitHub says which account does it
+ * (as), for the desk's bar; the elf refuses it if that isn't the item's account any more.
  */
 export async function act(action, params = {}) {
     const values = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null));
+    if (AS.has(action) && values.itemKey && !values.as) {
+        const as = await accountFor(values.itemKey);
+        if (as) values.as = as;
+    }
     const r = await elf.act(action, values);
     if (r && typeof r === 'object' && !Array.isArray(r) && typeof r.file === 'string' && Object.keys(r).length === 1) {
         return elf.readJson('cache', r.file);

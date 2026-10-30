@@ -186,6 +186,34 @@ export function nextYourMove(itemKey) {
     return all.slice(at + 1).find(yours) ?? all.find(yours) ?? null;
 }
 
+// ---- the board's accounts ----
+
+/** The accounts that found an item, by login: the one it's done as (it belongs to) first. */
+export function accountsOf(b, itemKey) {
+    return b?.found?.[itemKey] ?? (b?.login ? [b.login] : []);
+}
+
+/** The login an item is done as: who "you" are for it. */
+export function loginFor(b, itemKey) {
+    return accountsOf(b, itemKey)[0] ?? b?.login;
+}
+
+/** What you named an account (its login until you name it). */
+export function accountName(b, login) {
+    return (b?.accounts ?? []).find(a => a.login.toLowerCase() === login?.toLowerCase())?.name ?? login;
+}
+
+/** The board has more than one account, so items say whose they are. */
+export function manyAccounts(b) {
+    return (b?.accounts?.length ?? 0) > 1;
+}
+
+/** One of your accounts. */
+export function isMine(b, login) {
+    const l = login?.toLowerCase();
+    return !!l && (l === b?.login?.toLowerCase() || (b?.accounts ?? []).some(a => a.login.toLowerCase() === l));
+}
+
 /** The item is in the board's Ignored. */
 export function boardIgnores(itemKey) {
     return (lastBoard?.ignored ?? []).some(i => i.key === itemKey);

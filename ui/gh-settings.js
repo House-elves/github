@@ -1,11 +1,11 @@
-// The desk's GitHub settings (desk-settings.js), with its calls as the GitHub elf's actions: what the board watches
-// and how it refreshes are the elf's, in its state/ folder. None of them writes to GitHub.
+// The desk's GitHub settings (desk-settings.js), with its calls as the GitHub elf's actions: the gh accounts the board
+// works as, what it watches and how it refreshes are the elf's, in its state/ folder. None of them writes to GitHub.
 import { LitElement, html, css, shared, spinner } from '/elf-kit/1/kit.js';
 import { act, errorMessage, settingsView } from './api.js';
 
 /**
- * What the board watches (orgs, users, single repos, exclusions) and the refresh interval: the GitHub tab's own
- * settings, shown in its Settings (embedded).
+ * The accounts the board works as, what it watches (orgs, users, single repos, exclusions) and the refresh interval:
+ * the GitHub tab's own settings, shown in its Settings (embedded).
  */
 class GhSettings extends LitElement {
 
@@ -48,6 +48,10 @@ class GhSettings extends LitElement {
         .general { padding: 14px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
         code { font: 13px var(--font-code); background: var(--surface-2); padding: 2px 6px; border-radius: 5px; }
         .sk { height: 52px; }
+        .account { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; }
+        .account .login { font-size: 13.5px; color: var(--muted); }
+        .account input { width: min(16rem, 100%); }
+        form.add.two input { flex: 1 1 11rem; }
         @media (max-width: 600px) {
             h1 { font-size: 26px; }
             li { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
@@ -144,6 +148,7 @@ class GhSettings extends LitElement {
                     at the bottom of the board under "repos you don't watch".</p>
                 ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
                 ${s ? html`
+                    ${this._renderAccounts(s)}
                     ${this._firstRun() ? this._renderFirstRun() : this._renderScope(s)}
                     ${this._firstRun() ? '' : this._renderSuggestions()}
                     ${this._renderGeneral(s)}
@@ -154,6 +159,64 @@ class GhSettings extends LitElement {
                     </div>`)}
             </div>
         `;
+    }
+
+    /** The gh accounts the board works as, each with a name you give it: its items are tagged with it. */
+    _renderAccounts(s) {
+        const accounts = s.accounts?.length ? s.accounts : [{ login: s.login, name: s.login }];
+        return html`
+            <section aria-labelledby="accounts">
+                <div class="head"><h2 id="accounts">Accounts</h2>
+                    <p class="hint">The board shows what involves any of these, each item tagged with its account's name, and
+                        does what you click as that account. Each one must be logged in to gh on this machine
+                        (<code>gh auth login</code>). The first is the GitHub elf's own account, from its settings.</p></div>
+                <div class="panel">
+                    <ul>${accounts.map((a, i) => html`
+                        <li class="account">
+                            <div class="row-main">
+                                <label for="name-${a.login}" class="name">${a.login}</label>
+                                <input type="text" id="name-${a.login}" .value=${a.name === a.login ? '' : a.name}
+                                    placeholder="A name, for example Work" maxlength="30" ?disabled=${this._busy !== null}
+                                    @change=${e => this._rename(a, e.target.value)}>
+                            </div>
+                            <div class="acts">
+                                ${this._spin(`name:${a.login}`)}
+                                ${i === 0 ? '' : html`<button class="sm" ?disabled=${this._busy !== null}
+                                    @click=${() => this._do(`unaccount:${a.login}`, () => act('remove-account', { login: a.login }))}>
+                                    ${this._spin(`unaccount:${a.login}`)}Remove</button>`}
+                            </div>
+                        </li>`)}
+                    </ul>
+                    <form class="add two" @submit=${this._addAccount}>
+                        <input type="text" name="login" aria-label="gh login to add" placeholder="GitHub login" autocomplete="off">
+                        <input type="text" name="name" aria-label="Its name" placeholder="Name, for example Personal" maxlength="30">
+                        <button type="submit" ?disabled=${this._busy !== null}>${this._spin('account')}Add account</button>
+                    </form>
+                </div>
+            </section>
+        `;
+    }
+
+    async _rename(a, value) {
+        const name = value.trim() || a.login;
+        if (name === a.name) return;
+        await this._do(`name:${a.login}`, () => act('rename-account', { login: a.login, name }));
+    }
+
+    async _addAccount(e) {
+        e.preventDefault();
+        const form = e.target;
+        const login = form.elements.namedItem('login').value.trim();
+        const name = form.elements.namedItem('name').value.trim();
+        if (!login) return;
+        if (await this._accounts('account', () => act('add-account', { login, name }))) form.reset();
+    }
+
+    /** An account added: the board fetches again, for its items. */
+    async _accounts(what, call) {
+        const ok = await this._do(what, call);
+        if (ok) this.dispatchEvent(new CustomEvent('board-search-changed', { bubbles: true, composed: true }));
+        return ok;
     }
 
     _renderFirstRun() {

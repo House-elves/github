@@ -7,6 +7,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import io.github.houseelves.github.board.BoardMerge;
 import io.github.houseelves.github.thread.DeskThread;
 import io.github.houseelves.github.thread.ThreadView;
 
@@ -25,21 +28,35 @@ public class Views {
 
     /** Writes what this run changed. */
     public static void write(Elf elf) {
-        if (elf.live.board() && elf.boards.cached(elf.login)) board(elf);
+        if (elf.live.board() && anyCached(elf)) board(elf);
         for (DeskThread t : elf.store.saved()) thread(elf, t.itemKey);
         if (elf.live.settings() || !Files.exists(settingsFile(elf))) settings(elf);
     }
 
     /** Writes everything: after a refresh, or an import. */
     public static void writeAll(Elf elf) {
-        if (elf.boards.cached(elf.login)) board(elf);
+        if (anyCached(elf)) board(elf);
         for (DeskThread t : elf.store.threads()) thread(elf, t.itemKey);
         settings(elf);
         pruneCache(elf.home.cache());
     }
 
+    /**
+     * board.json: the board, with the accounts it's from ({login, name}, the first one GITHUB_ACCOUNT), and for each
+     * item the accounts that found it, the one it's done as first ({@code found}). Which account each item belongs to
+     * is kept for the actions too (state/owners.json).
+     */
     static void board(Elf elf) {
-        Json.write(elf.home.board().resolve("board.json"), elf.api.board(false));
+        BoardMerge.Merged m = elf.api.boards(false);
+        ObjectNode json = Json.MAPPER.valueToTree(m.board());
+        json.set("accounts", Json.MAPPER.valueToTree(elf.accounts.all()));
+        json.set("found", Json.MAPPER.valueToTree(m.found()));
+        Json.write(elf.home.board().resolve("board.json"), json);
+        elf.accounts.owners(m.owners());
+    }
+
+    private static boolean anyCached(Elf elf) {
+        return elf.accounts.logins().stream().anyMatch(elf.boards::cached);
     }
 
     static void thread(Elf elf, String itemKey) {

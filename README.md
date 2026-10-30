@@ -21,13 +21,27 @@ The runner runs it with jbang (`GitHubElf.java`). It needs `gh`, `git` and `clau
 |------------------|----------------------------------------------------------------------------------------|
 | `GITHUB_ACCOUNT` | The `gh` account the elf works as. Its token is `gh auth token -u <account>`, read fresh for each run, never written anywhere or logged. |
 
-The board's own settings (what it watches, the repos you maintain, refresh minutes) are at the top of
+The board's own settings (its accounts, what it watches, the repos you maintain, refresh minutes) are at the top of
 its Settings pop-up, drawn by the elf; the account, version, updates and removing it follow, from the desk.
 They're kept in `state/`, not in the config file.
 
+## More than one account
+
+Under **Accounts** in its Settings you can add more `gh` accounts (each logged in on this machine with `gh auth
+login`), and give each a name, such as Work or Personal. `GITHUB_ACCOUNT` is always the first. A refresh reads
+GitHub as each of them, at the same time, and the board shows every item once. An item belongs to the account it's
+most yours as: the one whose PR it is, then one asked to review it, then one it's assigned to, then one only involved
+(the first account wins a tie). Its row is tagged with that account's name (+1 when another account has it too),
+and the filter can show one account's items.
+
+Everything you do with an item is done as the account it belongs to, and the desk's bar names it before anything is
+written ("Close ... on GitHub, as phillip-kruger?"). If the item has since moved to another account, the elf
+refuses instead. The names are in `state/accounts.json`, and which account each item belongs to in
+`state/owners.json`; tokens still come from `gh` on each run and are never kept.
+
 ## What it reads and writes
 
-It reads, as your `gh` account: the open issues and PRs you're involved in, with their CI, reviews and merge
+It reads, as each of your `gh` accounts: the open issues and PRs you're involved in, with their CI, reviews and merge
 state, and the runner's reports on its agents.
 
 On your own PR, once you've pushed since someone asked for changes (or commented in a review), the next step is
@@ -52,7 +66,7 @@ It writes its files in `~/.config/github/` (each written whole, then moved into 
 
 | Folder        | What                                                                                                    |
 |---------------|---------------------------------------------------------------------------------------------------------|
-| `board/`      | `board.json`, the board the tab shows; `cache.json`, what GitHub said at the last refresh               |
+| `board/`      | `board.json`, the board the tab shows; `cache-<login>.json`, what GitHub said at the last refresh, per account |
 | `threads/`    | one file per item with a thread: its turns, the agent working on it, its draft                          |
 | `state/`      | what the desk kept in its database: scope, settings, ignored items, merges, the log of GitHub writes, and each thread's record in `state/threads/` |
 | `cache/`      | answers too big for one line (a PR's diff, its activity and reviews, a CI report), kept for a day        |

@@ -176,7 +176,12 @@ public class MergeService {
 
     /** One round over the waiting watches: what the desk did every minute, the elf does on each refresh. */
     public void poll(String token) {
-        List<MergeWatch> waiting = all().stream().filter(w -> w.state.equals(MergeWatch.WAITING)).toList();
+        poll(token, login -> true);
+    }
+
+    /** The round for the watches {@code by} accepts the asker of (null: asked before the board had accounts). */
+    public void poll(String token, java.util.function.Predicate<String> by) {
+        List<MergeWatch> waiting = all().stream().filter(w -> w.state.equals(MergeWatch.WAITING) && by.test(w.login)).toList();
         for (MergeWatch w : waiting) {
             try {
                 check(w.itemKey, github.pullState(token, repo(w.itemKey), number(w.itemKey)));

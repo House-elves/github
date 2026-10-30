@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.8.0
+version: 1.9.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -10,17 +10,17 @@ config: ~/.config/github/config
 tools: [gh, git, claude]
 
 reads:
-  - The open issues and PRs you're involved in on GitHub, with their CI, reviews and merge state, as your gh account.
+  - The open issues and PRs you're involved in on GitHub, with their CI, reviews and merge state, as each gh account the board works as (the elf's own, and any you add in its Settings).
   - The runner's reports on the agents this elf starts.
 writes:
-  - The board, its threads and its settings, in ~/.config/github/.
-  - On GitHub, only when you click and confirm it in the desk's bar, as your gh account - reviews, comments, new issues and PRs, closing and assigning, asking reviewers to review again, merges pinned to the head you saw, CI re-runs and approvals, branch updates.
+  - The board, its threads and its settings (the gh accounts it works as, by login and the name you give each), in ~/.config/github/.
+  - On GitHub, only when you click and confirm it in the desk's bar, as the gh account the item belongs to (the one that found it, which the bar names) - reviews, comments, new issues and PRs, closing and assigning, asking reviewers to review again, merges pinned to the head you saw, CI re-runs and approvals, branch updates.
   - Pushes the agent's commits (through the runner) when you confirm the push.
 
 settings:
   - key: GITHUB_ACCOUNT
     label: GitHub account
-    help: The gh account the board works as (gh auth login as it first). Its token is read from gh each time, never stored.
+    help: The gh account the board works as (gh auth login as it first). More can be added in the board's Settings. Tokens are read from gh each time, never stored.
     kind: login
 
 commands:
@@ -184,8 +184,10 @@ actions:
   ci-reopen:
     label: Close and reopen your PR to run CI again
     args: [--action=ci-reopen]
-    confirm: "Close and reopen {itemKey} on GitHub, to run CI again?"
+    confirm: "Close and reopen {itemKey} on GitHub as {as}, to run CI again?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   cancel-merge:
     label: Cancel a merge on green
@@ -230,6 +232,26 @@ actions:
     ask: false
     params:
       repo: {pattern: '\s*(https?://github\.com/)?[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/?\s*', max: 300}
+  add-account:
+    label: Add a gh account to the board
+    args: [--action=add-account]
+    ask: false
+    params:
+      login: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39}
+      name: {pattern: "[\\p{L}\\p{N} ._&'()-]{0,30}", max: 30, optional: true}
+  rename-account:
+    label: Name one of the board's accounts
+    args: [--action=rename-account]
+    ask: false
+    params:
+      login: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39}
+      name: {pattern: "[\\p{L}\\p{N} ._&'()-]{1,30}", max: 30}
+  remove-account:
+    label: Take an account off the board
+    args: [--action=remove-account]
+    ask: false
+    params:
+      login: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39}
   set-refresh-minutes:
     label: Set how often the board refreshes
     args: [--action=set-refresh-minutes]
@@ -332,8 +354,10 @@ actions:
   post:
     label: Post a draft to GitHub
     args: [--action=post]
-    confirm: "Post this {kind} on {itemKey} to GitHub, as you?"
+    confirm: "Post this {kind} on {itemKey} to GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       draftId: {kind: int}
       confirm: {pattern: '[0-9a-f-]{36}', max: 36}
       asDraft: {kind: bool, optional: true}
@@ -345,52 +369,68 @@ actions:
   close:
     label: Close an item on GitHub
     args: [--action=close]
-    confirm: "Close {itemKey} on GitHub?"
+    confirm: "Close {itemKey} on GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   ready-for-review:
     label: Mark your draft PR ready for review
     args: [--action=ready-for-review]
-    confirm: "Mark {itemKey} ready for review on GitHub?"
+    confirm: "Mark {itemKey} ready for review on GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   assign-me:
     label: Assign yourself on GitHub
     args: [--action=assign-me]
-    confirm: "Assign yourself to {itemKey} on GitHub?"
+    confirm: "Assign {as} to {itemKey} on GitHub?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   re-request-review:
     label: Ask them to review again
     args: [--action=re-request-review]
-    confirm: "Ask {reviewers} to review {itemKey} again, on GitHub?"
+    confirm: "Ask {reviewers} to review {itemKey} again, on GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       # Who the confirm bar names; the elf asks only those who reviewed before your latest commit.
       reviewers: {pattern: '[A-Za-z0-9-]{1,39}(,[A-Za-z0-9-]{1,39}){0,9}', max: 400}
   ci-rerun:
     label: Re-run the failed CI jobs
     args: [--action=ci-rerun]
-    confirm: "Re-run the failed CI jobs of {itemKey} on GitHub?"
+    confirm: "Re-run the failed CI jobs of {itemKey} on GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   ci-approve:
     label: Approve CI to run
     args: [--action=ci-approve]
-    confirm: "Approve the workflow runs waiting on {itemKey}, so CI runs?"
+    confirm: "Approve the workflow runs waiting on {itemKey} as {as}, so CI runs?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   ask-dependabot-to-rebase:
     label: Ask Dependabot to rebase
     args: [--action=ask-dependabot-to-rebase]
-    confirm: "Comment \"@dependabot rebase\" on {itemKey}, as you?"
+    confirm: "Comment \"@dependabot rebase\" on {itemKey}, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
   update-branch:
     label: Update the PR's branch
     args: [--action=update-branch]
-    confirm: "Rebase {itemKey} on its base branch on GitHub?"
+    confirm: "Rebase {itemKey} on its base branch on GitHub, as {as}?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       method: {one-of: [REBASE]}
   squash:
@@ -402,16 +442,20 @@ actions:
   merge-on-green:
     label: Merge when CI is green
     args: [--action=merge-on-green]
-    confirm: "Merge {itemKey} ({method}) once CI is green, at the head you saw?"
+    confirm: "Merge {itemKey} ({method}) as {as} once CI is green, at the head you saw?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       method: {one-of: [merge, squash, rebase]}
       headSha: {pattern: '[0-9a-f]{40}', max: 40}
   merge-without-approval:
     label: Merge without an approval
     args: [--action=merge-without-approval]
-    confirm: "Merge {itemKey} ({method}) without an approval, once CI is green?"
+    confirm: "Merge {itemKey} ({method}) as {as} without an approval, once CI is green?"
     params:
+      # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       method: {one-of: [merge, squash, rebase]}
       headSha: {pattern: '[0-9a-f]{40}', max: 40}

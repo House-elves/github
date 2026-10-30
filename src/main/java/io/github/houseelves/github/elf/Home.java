@@ -7,7 +7,7 @@ import java.nio.file.Path;
  * Tests give it a temp directory.
  *
  * <ul>
- * <li>{@code board/}: board.json (what the tab shows) and cache.json (what it's built from);</li>
+ * <li>{@code board/}: board.json (what the tab shows) and cache-{login}.json per account (what it's built from);</li>
  * <li>{@code threads/}: one ThreadView per item with a thread;</li>
  * <li>{@code state/}: what the desk kept in its tables;</li>
  * <li>{@code cache/}: answers too big for an action's one line;</li>

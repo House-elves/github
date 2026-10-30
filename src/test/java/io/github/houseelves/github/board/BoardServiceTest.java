@@ -68,7 +68,7 @@ class BoardServiceTest {
         service = new BoardService(github, scopes, settings, live, ignores, dir, clock);
     }
 
-    /** The next run of the elf: it reads board/cache.json. */
+    /** The next run of the elf: it reads board/cache-{login}.json. */
     BoardService again() {
         return new BoardService(github, scopes, settings, live, ignores, dir, clock);
     }
@@ -99,7 +99,7 @@ class BoardServiceTest {
     void theCacheFileAnswersTheNextRunHoweverOldAndARefreshFetchesAgain() {
         involvedReturns(pr("quarkusio/quarkus", 1, "x"));
         service.board("me", "t", false);
-        assertTrue(Files.isRegularFile(dir.resolve("cache.json")));
+        assertTrue(Files.isRegularFile(dir.resolve("cache-me.json")));
 
         involvedReturns(pr("quarkusio/quarkus", 2, "x"));
         now.set(now.get().plusSeconds(3600)); // the elf's schedule refreshes it, not a look at the board
@@ -114,13 +114,37 @@ class BoardServiceTest {
     }
 
     @Test
+    void eachAccountHasItsOwnCacheAndTheOldOneMovesToItsAccountsName() throws Exception {
+        involvedReturns(pr("quarkusio/quarkus", 1, "x"));
+        service.board("me", "t", false);
+        // The cache from before the board had accounts: one file, cache.json.
+        Files.move(dir.resolve("cache-me.json"), dir.resolve("cache.json"));
+        involvedReturns(pr("quarkusio/quarkus", 2, "x"));
+        BoardService next = again();
+        next.board("work", "t2", false);
+
+        BoardService third = again();
+        assertTrue(third.cached("me"));
+        assertTrue(third.cached("work"));
+        assertFalse(Files.exists(dir.resolve("cache.json")));
+        assertTrue(Files.isRegularFile(dir.resolve("cache-me.json")));
+        assertEquals(List.of("quarkusio/quarkus#1"), keys(third.board("me", null, false)));
+        assertEquals(List.of("quarkusio/quarkus#2"), keys(third.board("work", null, false)));
+
+        third.drop("work");
+        assertFalse(Files.exists(dir.resolve("cache-work.json")));
+        assertFalse(again().cached("work"));
+        assertTrue(again().cached("me"));
+    }
+
+    @Test
     void aDryRunShowsWhatGitHubSaysAndKeepsNothing() {
         involvedReturns(pr("quarkusio/quarkus", 1, "x"));
         when(ignores.ignoredSince()).thenReturn(Map.of("quarkusio/quarkus#9", Instant.EPOCH));
         when(github.activityForMe(anyString(), anyString(), org.mockito.ArgumentMatchers.anyMap()))
                 .thenReturn(Map.of("quarkusio/quarkus#9", "You were mentioned"));
         assertEquals(List.of("quarkusio/quarkus#1"), keys(service.preview("me", "t")));
-        assertFalse(Files.exists(dir.resolve("cache.json")));
+        assertFalse(Files.exists(dir.resolve("cache-me.json")));
         assertFalse(service.cached("me"));
         verify(ignores, never()).bringBack(anyString(), anyString());
     }

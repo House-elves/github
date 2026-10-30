@@ -74,15 +74,20 @@ public class GitHubWriter {
     }
 
     final ObjectMapper mapper = Json.MAPPER;
-    final String login;
+    /** Who it writes as: the account acting now (the item's, when the board has several). */
+    final Supplier<String> login;
     final Transport transport;
 
     /** Writes as {@code login}, with the token {@code token} gives (asked for only when something is written). */
-    public GitHubWriter(String login, Supplier<String> token) {
+    public GitHubWriter(Supplier<String> login, Supplier<String> token) {
         this(login, http(token));
     }
 
     public GitHubWriter(String login, Transport transport) {
+        this(() -> login, transport);
+    }
+
+    public GitHubWriter(Supplier<String> login, Transport transport) {
         this.login = login;
         this.transport = transport;
     }
@@ -122,7 +127,7 @@ public class GitHubWriter {
         find.putObject("variables").put("o", r[0]).put("n", r[1]).put("p", number);
         JsonNode pr = graphql(find).path("data").path("repository").path("pullRequest");
         if (pr.path("id").asText(null) == null) throw new WriteFailed(0, null, "No pull request " + repo + "#" + number);
-        if (!login.equalsIgnoreCase(pr.path("author").path("login").asText())) {
+        if (!login.get().equalsIgnoreCase(pr.path("author").path("login").asText())) {
             throw new WriteFailed(0, null, "Refused: " + repo + "#" + number + " isn't your PR");
         }
         if (!pr.path("isDraft").asBoolean()) return mapper.createObjectNode();
@@ -130,7 +135,7 @@ public class GitHubWriter {
                 + "markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }");
         ready.putObject("variables").put("id", pr.path("id").asText());
         refused(graphql(ready));
-        LOG.infof("Marked %s#%d ready for review as %s", repo, number, login);
+        LOG.infof("Marked %s#%d ready for review as %s", repo, number, login.get());
         return mapper.createObjectNode();
     }
 
@@ -191,7 +196,7 @@ public class GitHubWriter {
         update.putObject("variables").put("id", id).put("head", expectedHead).put("how", method);
         JsonNode done = graphql(update);
         refused(done);
-        LOG.infof("Updated %s#%d by %s as %s", repo, number, method.toLowerCase(), login);
+        LOG.infof("Updated %s#%d by %s as %s", repo, number, method.toLowerCase(), login.get());
         return done.path("data").path("updatePullRequestBranch");
     }
 
@@ -208,7 +213,7 @@ public class GitHubWriter {
 
     JsonNode write(String method, String path, Map<String, Object> body) {
         JsonNode json = mapper.valueToTree(body);
-        if (!allowedWrite(method, path, json, login)) {
+        if (!allowedWrite(method, path, json, login.get())) {
             throw new WriteFailed(0, null, "The GitHub elf only posts reviews, comments, new issues and PRs, closes items "
                     + "and merges PRs; refused " + method + " " + path);
         }
@@ -220,7 +225,7 @@ public class GitHubWriter {
         } catch (RuntimeException e) {
             throw new WriteFailed(0, null, e.getMessage());
         }
-        LOG.infof("GitHub %s %s as %s: %d", method, path, login, r.status());
+        LOG.infof("GitHub %s %s as %s: %d", method, path, login.get(), r.status());
         String responseBody = r.body() == null ? "" : r.body();
         if (r.status() < 200 || r.status() >= 300) {
             throw new WriteFailed(r.status(), responseBody, "HTTP " + r.status());

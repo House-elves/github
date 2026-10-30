@@ -5,7 +5,7 @@
 import { LitElement, html, css, shared, ago, markdown, markdownStyles, spinner, Ticking, copyText, elf } from '/elf-kit/1/kit.js';
 import {
     isDependabot, linksFor, prRef, threadHref, rememberItem, knownItem, kindIcon, ciFailing, ciNeedsApproval, hasConflicts,
-    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores, usd, COST_HINT, nextYourMove } from './shared.js';
+    behind, mergeable, mergeableAnyway, lastBoard, setLastBoard, rememberBoard, boardIgnores, usd, COST_HINT, nextYourMove, loginFor } from './shared.js';
 import { act, agentReport, board, cancel, cancelled, errorMessage, post, squash, startAgent, thread } from './api.js';
 import './gh-description.js';
 import './merge-control.js';
@@ -697,7 +697,7 @@ class GhThread extends LitElement {
                             title="Make the PR one commit on its base. You confirm the push.">
                             ${this._spin('squash')}Squash into one commit (${this._commits})</button>` : ''}
                     ${kind === 'PR' && item?.draft && !merged && !this._closed
-                        && item.author?.toLowerCase() === lastBoard?.login?.toLowerCase() ? html`
+                        && item.author?.toLowerCase() === loginFor(lastBoard, this.itemKey)?.toLowerCase() ? html`
                         <button class="primary" ?disabled=${this._busy} @click=${this._ready}
                             title="Your draft PR: once you've read the change on GitHub, ask for reviews">${this._spin('ready')}Ready for review</button>` : ''}
                     ${kind === 'PR' && !merged ? html`<pr-activity block .itemKey=${this.itemKey} @thread-changed=${() => this._load()}></pr-activity>` : ''}
