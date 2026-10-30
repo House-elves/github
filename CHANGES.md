@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.9.1
+
+- In Settings, the orgs you watch and the suggested ones say which of your accounts have items there.
+- The setup's GitHub account is now called Main GitHub account, and says it's the first one under Accounts, where you
+  add more.
+
 ## 1.9.0
 
 - More than one GitHub account: add them under **Accounts** in the board's Settings, each with a name you give it

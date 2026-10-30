@@ -52,6 +52,11 @@ class GhSettings extends LitElement {
         .account .login { font-size: 13.5px; color: var(--muted); }
         .account input { width: min(16rem, 100%); }
         form.add.two input { flex: 1 1 11rem; }
+        .acct {
+            display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 7px; border-radius: 999px; white-space: nowrap;
+            border: 1px solid var(--line); color: var(--muted); font-weight: 400;
+        }
+        .named { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
         @media (max-width: 600px) {
             h1 { font-size: 26px; }
             li { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
@@ -169,7 +174,7 @@ class GhSettings extends LitElement {
                 <div class="head"><h2 id="accounts">Accounts</h2>
                     <p class="hint">The board shows what involves any of these, each item tagged with its account's name, and
                         does what you click as that account. Each one must be logged in to gh on this machine
-                        (<code>gh auth login</code>). The first is the GitHub elf's own account, from its settings.</p></div>
+                        (<code>gh auth login</code>). The first is the main account, set under Its setup below.</p></div>
                 <div class="panel">
                     <ul>${accounts.map((a, i) => html`
                         <li class="account">
@@ -219,6 +224,14 @@ class GhSettings extends LitElement {
         return ok;
     }
 
+    /** With more than one account: the names of those with items there (as the last refresh found them). */
+    _accountTags(logins) {
+        const accounts = this._settings?.accounts ?? [];
+        if (accounts.length < 2 || !logins?.length) return '';
+        const name = l => accounts.find(a => a.login.toLowerCase() === l.toLowerCase())?.name ?? l;
+        return logins.map(l => html`<span class="acct" title="${l} has items here">${name(l)}</span>`);
+    }
+
     _renderFirstRun() {
         const sug = this._suggestions ?? [];
         return html`
@@ -230,7 +243,7 @@ class GhSettings extends LitElement {
                         <ul>${sug.map(x => html`
                             <li><label class="pick">
                                 <input type="checkbox" .checked=${this._picked.has(x.owner)} @change=${() => this._togglePick(x.owner)}>
-                                <span class="row-main"><span class="name">${x.owner}</span>
+                                <span class="row-main"><span class="named"><span class="name">${x.owner}</span>${this._accountTags(x.accounts)}</span>
                                     <span class="chips">
                                         <span class="chip">${x.items} open item${x.items === 1 ? '' : 's'}</span>
                                         ${x.member ? html`<span class="chip">Member</span>` : ''}
@@ -263,7 +276,7 @@ class GhSettings extends LitElement {
                         return html`
                             <li>
                                 <div class="row-main">
-                                    <span class="name">${o.name}</span>
+                                    <span class="named"><span class="name">${o.name}</span>${this._accountTags(o.accounts)}</span>
                                     ${ex.length ? html`<div class="chips">${ex.map(x => html`
                                         <span class="chip">Not ${x.name.slice(o.name.length + 1)}<button
                                             aria-label="Watch ${x.name} again" title="Watch it again" ?disabled=${this._busy !== null}
@@ -290,7 +303,7 @@ class GhSettings extends LitElement {
                     <p class="hint">Repos outside the orgs above. Paste a GitHub URL or type <code>owner/repo</code>, or an org name to watch the whole org.</p></div>
                 <div class="panel">
                     ${repos.length === 0 ? html`<p class="empty">None yet.</p>` : html`<ul>${repos.map(r => html`
-                        <li><span class="name">${r.name}</span>
+                        <li><span class="named"><span class="name">${r.name}</span>${this._accountTags(r.accounts)}</span>
                             <div class="acts"><button class="sm" ?disabled=${this._busy !== null}
                                 @click=${() => this._do(`rm:${r.id}`, () => act('remove', { id: r.id }))}>${this._spin(`rm:${r.id}`)}Remove</button></div>
                         </li>`)}</ul>`}
@@ -359,7 +372,7 @@ class GhSettings extends LitElement {
                 <div class="panel">
                     <ul>${sug.map(x => html`
                         <li>
-                            <div class="row-main"><span class="name">${x.owner}</span>
+                            <div class="row-main"><span class="named"><span class="name">${x.owner}</span>${this._accountTags(x.accounts)}</span>
                                 <div class="chips"><span class="chip">${x.items} open item${x.items === 1 ? '' : 's'}</span>
                                     ${x.member ? html`<span class="chip">Member</span>` : ''}</div></div>
                             <div class="acts"><button class="sm" ?disabled=${this._busy !== null}

@@ -124,7 +124,7 @@ public class Accounts {
     /** Takes an account off the board. Not GITHUB_ACCOUNT: that one is changed in the elf's settings. */
     public List<Named> remove(String login) {
         if (login != null && login.equalsIgnoreCase(primary)) {
-            throw new IllegalArgumentException(primary + " is the elf's own account: change it in the GitHub elf's settings.");
+            throw new IllegalArgumentException(primary + " is the main account: change it under Its setup in the GitHub settings.");
         }
         if (!has(login)) throw new IllegalArgumentException(login + " isn't one of the board's accounts.");
         List<Named> saved = new ArrayList<>(saved());

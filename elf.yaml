@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.9.0
+version: 1.9.1
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -19,8 +19,8 @@ writes:
 
 settings:
   - key: GITHUB_ACCOUNT
-    label: GitHub account
-    help: The gh account the board works as (gh auth login as it first). More can be added in the board's Settings. Tokens are read from gh each time, never stored.
+    label: Main GitHub account
+    help: The first account under Accounts, at the top of these settings, where you add more and name them. Log in to gh as it first (gh auth login). Tokens are read from gh each time, never stored.
     kind: login
 
 commands:

@@ -227,8 +227,9 @@ public class BoardService {
      * @param items     open items involving you in that owner's repos
      * @param member    you belong to this org
      * @param preselect ticked on the first-run screen: an org you belong to that has items
+     * @param accounts  the board's accounts it's suggested for (that have items there, or belong to it)
      */
-    public record Suggestion(String owner, int items, boolean member, boolean preselect) {
+    public record Suggestion(String owner, int items, boolean member, boolean preselect, List<String> accounts) {
     }
 
     /** Owners not yet watched, busiest first, followed by your other orgs. */
@@ -261,11 +262,22 @@ public class BoardService {
                 .map(e -> {
                     int n = counts.getOrDefault(e.getKey(), 0);
                     boolean member = members.contains(e.getKey());
-                    return new Suggestion(e.getValue(), n, member, firstRun && member && n > 0);
+                    return new Suggestion(e.getValue(), n, member, firstRun && member && n > 0, List.of(login));
                 })
                 .sorted(Comparator.comparingInt(Suggestion::items).reversed()
                         .thenComparing(Suggestion::owner, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+    }
+
+    /** The repos (owner/repo, lower case) of what was last fetched for {@code login}: where that account has items. */
+    public Set<String> repos(String login) {
+        load();
+        BoardClassifier.Fetched f = cache.get(login);
+        if (f == null) return Set.of();
+        Set<String> repos = new HashSet<>();
+        java.util.stream.Stream.of(f.involved(), f.reviewRequested(), f.reviewedByMe()).flatMap(List::stream)
+                .forEach(i -> repos.add(i.repo().toLowerCase(Locale.ROOT)));
+        return repos;
     }
 
     /** Drops an item from the cached board right away, e.g. after you close it; the next fetch confirms it. */

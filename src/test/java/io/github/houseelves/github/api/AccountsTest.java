@@ -165,6 +165,21 @@ class AccountsTest {
     }
 
     @Test
+    void whatsWatchedAndSuggestedSaysWhichAccountsHaveItemsThere() {
+        act("watch", "{\"name\": \"quarkusio\"}");
+        act("add-account", "{\"login\": \"home-me\", \"name\": \"Home\"}");
+        refresh();
+
+        JsonNode scope = act("settings", "{}").path("scope");
+        assertEquals("quarkusio", scope.path(0).path("name").asText());
+        assertEquals(List.of("phillip-kruger", HOME), Json.MAPPER.convertValue(scope.path(0).path("accounts"), List.class));
+
+        JsonNode suggested = act("suggestions", "{}");
+        assertEquals("example-org", suggested.path(0).path("owner").asText());
+        assertEquals(List.of(HOME), Json.MAPPER.convertValue(suggested.path(0).path("accounts"), List.class));
+    }
+
+    @Test
     void anAccountGhIsntLoggedInToIsntAdded() {
         Home home = new Home(dir);
         Accounts accounts = new Accounts(home.state(), TestElf.LOGIN, l -> {

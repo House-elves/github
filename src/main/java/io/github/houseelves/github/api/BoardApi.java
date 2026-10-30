@@ -470,7 +470,8 @@ public class BoardApi {
 
     // ---- settings ----
 
-    public record ScopeRow(long id, String kind, String name, String mode) {
+    /** @param accounts the board's accounts with items in it, as the last refresh found them */
+    public record ScopeRow(long id, String kind, String name, String mode, List<String> accounts) {
     }
 
     /** @param alwaysInvolved repos you maintain: every open PR and issue in them is on the board */
@@ -482,9 +483,16 @@ public class BoardApi {
     /** What state/settings-view.json has. */
     public SettingsView settings() {
         List<ScopeRow> rows = scopes.rows().stream()
-                .map(w -> new ScopeRow(w.id, w.kind.name(), w.name, w.mode.name()))
+                .map(w -> new ScopeRow(w.id, w.kind.name(), w.name, w.mode.name(), accountsIn(w.name)))
                 .toList();
         return new SettingsView(accounts.primary(), rows, settings.refreshMinutes(), settings.alwaysInvolved(), accounts.all());
+    }
+
+    /** The accounts that have items in an owner's repos (a name without /) or in one repo. */
+    private List<String> accountsIn(String name) {
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        return accounts.logins().stream().filter(l -> boards.repos(l).stream()
+                .anyMatch(r -> n.contains("/") ? r.equals(n) : r.startsWith(n + "/"))).toList();
     }
 
     /** A repo you maintain: its open PRs come to "Needs my review" and its unassigned issues are yours, involved or not. */
@@ -525,7 +533,8 @@ public class BoardApi {
                 }
                 for (BoardService.Suggestion s : found) {
                     byOwner.merge(s.owner().toLowerCase(java.util.Locale.ROOT), s, (a, b) -> new BoardService.Suggestion(
-                            a.owner(), a.items() + b.items(), a.member() || b.member(), a.preselect() || b.preselect()));
+                            a.owner(), a.items() + b.items(), a.member() || b.member(), a.preselect() || b.preselect(),
+                            java.util.stream.Stream.concat(a.accounts().stream(), b.accounts().stream()).distinct().toList()));
                 }
             }
         } finally {
