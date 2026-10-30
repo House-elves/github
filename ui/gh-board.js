@@ -52,10 +52,10 @@ async function loadFilter() {
 
 /**
  * Whether an item passes the filter: every word of the text is in its title, repo, number, tag, author or account
- * name, its tag is one of those picked (when any are), and one of the accounts that found it is one of those picked
- * (when any are). Items with no tag (not watched, ignored) pass only without tags.
+ * name, its tag is one of those picked (when any are), and its account is one of those picked (when any are). Items
+ * with no tag (not watched, ignored) pass only without tags.
  *
- * @param found the logins of the accounts that found it; names, what you call them
+ * @param found the login of the account it belongs to (none with one account); names, what you call it
  */
 export function matches(item, role, filter, found = [], names = []) {
     if (filter.tags.size && !filter.tags.has(role)) return false;
@@ -648,10 +648,13 @@ class GhBoard extends LitElement {
         return new Set([...(this._filter.accounts ?? [])].filter(l => logins.has(l)));
     }
 
-    /** Whether an item passes the filter, with the accounts that found it and their names. */
+    /**
+     * Whether an item passes the filter, by the account it belongs to (its tag), and that account's name: an item
+     * another account also found shows only under its own.
+     */
     _matches(item, role) {
         const b = this._board;
-        const found = manyAccounts(b) ? accountsOf(b, item.key) : [];
+        const found = manyAccounts(b) ? [loginFor(b, item.key)] : [];
         const f = { ...this._filter, accounts: manyAccounts(b) ? this._accountsPicked() : new Set() };
         return matches(item, role, f, found, found.map(l => accountName(b, l)));
     }
@@ -707,7 +710,7 @@ class GhBoard extends LitElement {
             <div class="tags" role="group" aria-label="Show only the account">
                 ${b.accounts.map(a => html`<button class="sm tag account" aria-pressed=${picked.has(a.login) ? 'true' : 'false'}
                     title=${a.name === a.login ? a.login : `${a.name} (${a.login})`} @click=${() => toggle(a.login)}>
-                    ${a.name} <span class="n">${all.filter(r => accountsOf(b, r.item.key).includes(a.login)).length}</span></button>`)}
+                    ${a.name} <span class="n">${all.filter(r => loginFor(b, r.item.key) === a.login).length}</span></button>`)}
                 ${picked.size ? html`<button class="sm quiet" @click=${() => this._setFilter({ ...f, accounts: new Set() })}>All accounts</button>` : ''}
             </div>`;
     }
@@ -725,6 +728,8 @@ class GhBoard extends LitElement {
     _renderBoard(b) {
         const all = this._rows(b);
         const rows = all.filter(r => this._matches(r.item, r.flow.role));
+        const hidden = b.hidden.filter(i => this._matches(i, null));
+        const ignored = b.ignored.filter(i => this._matches(i, null));
         const by = Object.fromEntries(SECTIONS.map(s => [s.id, []]));
         rows.forEach(r => (by[r.flow.waiting] ?? by.watching).push(r));
         // Most recent first: what just changed is what you're likely to act on.
@@ -757,20 +762,20 @@ class GhBoard extends LitElement {
                     ${SECTIONS.map(s => html`
                         <button class="${s.id} ${by[s.id].length ? '' : 'zero'}" @click=${() => this._jump(s.id)}>
                             <span>${s.title}</span><span class="n">${by[s.id].length}</span></button>`)}
-                    ${b.hidden.length || b.ignored.length ? html`<hr>` : ''}
-                    ${b.hidden.length ? html`
+                    ${hidden.length || ignored.length ? html`<hr>` : ''}
+                    ${hidden.length ? html`
                         <button class="zero" @click=${() => this._jump('hidden')}>
-                            <span>Not watched</span><span class="n">${b.hidden.length}</span></button>` : ''}
-                    ${b.ignored.length ? html`
+                            <span>Not watched</span><span class="n">${hidden.length}</span></button>` : ''}
+                    ${ignored.length ? html`
                         <button class="zero" @click=${() => this._jump('ignored')}>
-                            <span>Ignored</span><span class="n">${b.ignored.length}</span></button>` : ''}
+                            <span>Ignored</span><span class="n">${ignored.length}</span></button>` : ''}
                     <p class="keys"><kbd>j</kbd> <kbd>k</kbd> move, <kbd>Enter</kbd> next step, <kbd>o</kbd> open, <kbd>/</kbd> filter</p>
                 </aside>
                 <div class="sections">
                     ${b.scopeEmpty ? '' : this._renderFilter(all, rows.length)}
                     ${SECTIONS.map(s => this._renderSection(s, by[s.id]))}
-                    ${this._renderHidden(b.hidden.filter(i => this._matches(i, null)))}
-                    ${this._renderIgnored(b.ignored.filter(i => this._matches(i, null)))}
+                    ${this._renderHidden(hidden)}
+                    ${this._renderIgnored(ignored)}
                 </div>
             </div>
         `;

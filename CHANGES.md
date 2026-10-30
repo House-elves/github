@@ -3,6 +3,11 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.9.3
+
+- Filtering by account goes by each item's tag: an item shows under the account it's done as, in every section
+  (Later, Waiting on CI, Waiting on others, Not watched, Ignored...), and the counts beside them follow.
+
 ## 1.9.2
 
 - Repos I maintain say which of your accounts their items on the board are done as.
