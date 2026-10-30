@@ -475,9 +475,13 @@ public class BoardApi {
     }
 
     /** @param alwaysInvolved repos you maintain: every open PR and issue in them is on the board */
-    /** @param accounts the gh accounts the board works as, GITHUB_ACCOUNT ({@code login}) first, each named */
+    /**
+     * @param accounts      the gh accounts the board works as, GITHUB_ACCOUNT ({@code login}) first, each named
+     * @param maintainedBy  for each repo you maintain, the accounts its items on the board belong to (every account
+     *                      searches them, so it's who the items are done as that tells them apart)
+     */
     public record SettingsView(String login, List<ScopeRow> scope, int refreshMinutes, List<String> alwaysInvolved,
-            List<Accounts.Named> accounts) {
+            List<Accounts.Named> accounts, Map<String, List<String>> maintainedBy) {
     }
 
     /** What state/settings-view.json has. */
@@ -485,7 +489,15 @@ public class BoardApi {
         List<ScopeRow> rows = scopes.rows().stream()
                 .map(w -> new ScopeRow(w.id, w.kind.name(), w.name, w.mode.name(), accountsIn(w.name)))
                 .toList();
-        return new SettingsView(accounts.primary(), rows, settings.refreshMinutes(), settings.alwaysInvolved(), accounts.all());
+        Map<String, List<String>> maintainedBy = new LinkedHashMap<>();
+        for (String repo : settings.alwaysInvolved()) {
+            String prefix = repo.toLowerCase(java.util.Locale.ROOT) + "#";
+            maintainedBy.put(repo, accounts.logins().stream().filter(l -> accounts.owners().entrySet().stream()
+                    .anyMatch(e -> e.getValue().equalsIgnoreCase(l) && e.getKey().toLowerCase(java.util.Locale.ROOT)
+                            .startsWith(prefix))).toList());
+        }
+        return new SettingsView(accounts.primary(), rows, settings.refreshMinutes(), settings.alwaysInvolved(), accounts.all(),
+                maintainedBy);
     }
 
     /** The accounts that have items in an owner's repos (a name without /) or in one repo. */

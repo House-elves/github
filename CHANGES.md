@@ -3,6 +3,10 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.9.2
+
+- Repos I maintain say which of your accounts their items on the board are done as.
+
 ## 1.9.1
 
 - In Settings, the orgs you watch and the suggested ones say which of your accounts have items there.

@@ -324,7 +324,7 @@ class GhSettings extends LitElement {
                         assigned to is your move, even when GitHub doesn't count you as involved.</p></div>
                 <div class="panel">
                     ${repos.length === 0 ? html`<p class="empty">None yet.</p>` : html`<ul>${repos.map(r => html`
-                        <li><span class="name">${r}</span>
+                        <li><span class="named"><span class="name">${r}</span>${this._accountTags(s.maintainedBy?.[r])}</span>
                             <div class="acts"><button class="sm" ?disabled=${this._busy !== null}
                                 @click=${() => this._maintained(`unmaintain:${r}`, () => act('remove-always-involved', { repo: r }))}>
                                 ${this._spin(`unmaintain:${r}`)}Remove</button></div>

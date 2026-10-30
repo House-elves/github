@@ -177,6 +177,13 @@ class AccountsTest {
         JsonNode suggested = act("suggestions", "{}");
         assertEquals("example-org", suggested.path(0).path("owner").asText());
         assertEquals(List.of(HOME), Json.MAPPER.convertValue(suggested.path(0).path("accounts"), List.class));
+
+        // A repo you maintain is searched as every account: its tag is whose its items are on the board.
+        when(github.isPublic(anyString(), eq("example-org/app"))).thenReturn(true);
+        act("add-always-involved", "{\"repo\": \"example-org/app\"}");
+        refresh();
+        assertEquals(List.of(HOME), Json.MAPPER.convertValue(
+                act("settings", "{}").path("maintainedBy").path("example-org/app"), List.class));
     }
 
     @Test
