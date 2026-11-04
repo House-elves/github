@@ -21,7 +21,7 @@ const SECTIONS = [
     { id: 'you', title: 'Your move', empty: 'Nothing needs you right now.' },
     { id: 'agent', title: 'Agent working' },
     { id: 'ci', title: 'Waiting on CI' },
-    { id: 'later', title: 'Later' },
+    { id: 'later', title: 'Later', fold: true },
     { id: 'others', title: 'Waiting on others', fold: true },
     { id: 'parked', title: 'Draft PRs', fold: true },
     { id: 'done', title: 'Done', fold: true },

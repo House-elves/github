@@ -3,6 +3,11 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.9.4
+
+- Later folds like Waiting on others: it starts closed, showing its count, and opens with a click (or from its
+  name on the side, or when you filter).
+
 ## 1.9.3
 
 - Filtering by account goes by each item's tag: an item shows under the account it's done as, in every section

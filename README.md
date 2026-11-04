@@ -58,7 +58,7 @@ it's what it would have cost, not what you're billed.
 
 An item in Your move can go to **Later** (the zz under its icon): it waits there, after Waiting on CI, until you
 do something with it (start the agent, post, merge, ...) or click its zz again. It's kept in
-`state/later.json`; nothing changes on GitHub.
+`state/later.json`; nothing changes on GitHub. Like Waiting on others, Later stays folded until you open it.
 
 Dependabot's org.mvnpm bumps aren't on the board: the mvnpm tab (the mvnpm-dependabot elf) handles them.
 
