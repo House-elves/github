@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.10.0
+
+- New: voice input. A 🎤 next to "Ask the agent" and "Reply to the agent" on an item's thread: say it, and the words
+  go in at the cursor. The desk listens, with your browser's speech recognition or Whisper on its machine. Needs Elf
+  Desk 0.6.42.
+
 ## 1.9.4
 
 - Later folds like Waiting on others: it starts closed, showing its count, and opens with a click (or from its

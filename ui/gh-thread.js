@@ -1164,6 +1164,7 @@ class GhThread extends LitElement {
                 <div class="row">
                     <button class="primary" type="submit" ?disabled=${this._busy || working}>${this._spin('send')}${t ? 'Send' : 'Ask'}</button>
                     <span class="muted">${working ? "You can reply once the agent has finished." : 'Ctrl+Enter sends'}</span>
+                    <elf-mic .target=${() => this.renderRoot.querySelector('#reply')}></elf-mic>
                 </div>
             </form>
         `;
