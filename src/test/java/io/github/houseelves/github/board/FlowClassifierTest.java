@@ -82,7 +82,7 @@ class FlowClassifierTest {
     void myPrMovesThroughCiReviewsAndMerge() {
         is(FlowClassifier.flow("mine", pr2(ME, "PENDING", "BLOCKED", "MERGEABLE", false, false, null), ctx()), Flow.CI, 1, null);
         is(FlowClassifier.flow("mine", pr2(ME, "FAILURE", "UNSTABLE", "MERGEABLE", false, false, null), ctx()), Flow.YOU, 1, "ci-why");
-        is(FlowClassifier.flow("mine", pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", false, false, null), ctx()), Flow.OTHERS, 2, null);
+        is(FlowClassifier.flow("mine", pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", false, false, null), ctx()), Flow.OTHERS, 2, "review");
         is(FlowClassifier.flow("mine", pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", false, false, "CHANGES_REQUESTED"), ctx()),
                 Flow.YOU, 2, "read-review");
         is(FlowClassifier.flow("mine", pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", true, false, "APPROVED"), ctx()), Flow.YOU, 3, "merge");
@@ -98,8 +98,13 @@ class FlowClassifierTest {
                 pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", false, false, null),
                 pr2(ME, "SUCCESS", "DRAFT", "MERGEABLE", false, true, null))) {
             Flow f = FlowClassifier.flow("mine", p, ctx());
-            assertEquals(1, f.more().stream().filter(n -> n.id().equals("review")).count(), f.say());
+            long offered = f.more().stream().filter(n -> n.id().equals("review")).count() + (f.next() != null && f.next().id().equals("review") ? 1 : 0);
+            assertEquals(1, offered, f.say());
         }
+        // Waiting on others, with nothing for you to do: self-review is the step on show.
+        Flow waiting = FlowClassifier.flow("mine", pr2(ME, "SUCCESS", "CLEAN", "MERGEABLE", false, false, null), ctx());
+        is(waiting, Flow.OTHERS, 2, "review");
+        assertEquals("Self-review", waiting.next().label());
         // While the agent works, nothing else is offered.
         Flow working = FlowClassifier.flow("mine", pr2(ME, "PENDING", "BLOCKED", "MERGEABLE", false, false, null),
                 ctx(thread("working", "review", null), null, null, null, List.of()));
@@ -134,7 +139,7 @@ class FlowClassifierTest {
         is(FlowClassifier.flow("mine", noChecks, ctx(pushed, null, null, null, List.of())), Flow.CI, 1, null);
         // An hour later still nothing: not CI starting, the repo just has no checks.
         ThreadView.Summary old = new ThreadView.Summary("k", "idle", "ci-fix", null, NOW, false, "push", NOW.minusSeconds(3600));
-        is(FlowClassifier.flow("mine", noChecks, ctx(old, null, null, null, List.of())), Flow.OTHERS, 2, null);
+        is(FlowClassifier.flow("mine", noChecks, ctx(old, null, null, null, List.of())), Flow.OTHERS, 2, "review");
     }
 
     @Test
@@ -158,7 +163,7 @@ class FlowClassifierTest {
                 p.createdAt(), NOW.minusSeconds(300), 0, false, p.headRef(), p.headSha(), "SUCCESS", null, "MERGEABLE", "BLOCKED", false);
         is(FlowClassifier.flow("mine", fresh, ctx()), Flow.CI, 1, null);
         Flow old = FlowClassifier.flow("mine", p, ctx());
-        is(old, Flow.OTHERS, 2, null);
+        is(old, Flow.OTHERS, 2, "review");
         assertEquals("Waiting on reviewers for 8 days.", old.say());
     }
 
@@ -175,7 +180,7 @@ class FlowClassifierTest {
         // You answered since: back to waiting on them, with the threads still mentioned.
         f = FlowClassifier.flow("mine", waiting, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
                 new GitHub.Feedback("brunobat", at, "COMMENTED", false, 1)));
-        is(f, Flow.OTHERS, 2, null);
+        is(f, Flow.OTHERS, 2, "review");
         org.junit.jupiter.api.Assertions.assertTrue(f.say().endsWith(", 1 thread open."), f.say());
     }
 
@@ -215,7 +220,7 @@ class FlowClassifierTest {
         // Asked: waiting on them.
         f = FlowClassifier.flow("mine", pushed, new FlowClassifier.Ctx(ME, null, null, null, null, List.of(), NOW,
                 new GitHub.Feedback("brunobat", at, "CHANGES_REQUESTED", false, 0, List.of(), List.of("brunobat"))));
-        is(f, Flow.OTHERS, 2, null);
+        is(f, Flow.OTHERS, 2, "review");
         org.junit.jupiter.api.Assertions.assertTrue(f.say().startsWith("Waiting for brunobat to review again"), f.say());
     }
 

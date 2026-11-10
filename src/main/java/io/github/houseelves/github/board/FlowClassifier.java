@@ -207,6 +207,8 @@ public final class FlowClassifier {
         Flow f = mineState(i, c);
         Flow.Next self = new Flow.Next("review", "Self-review");
         if (f.next() != null && f.next().id().equals("review") || f.more().stream().anyMatch(n -> n.id().equals("review"))) return f;
+        // Waiting on others with nothing for you to do: self-review is the step on show, not tucked under More.
+        if (f.next() == null && f.waiting().equals(Flow.OTHERS)) return f.with(f.waiting(), f.since(), f.say(), self, f.more());
         List<Flow.Next> more = new ArrayList<>(f.more());
         more.add(self);
         return f.with(f.waiting(), f.since(), f.say(), f.next(), List.copyOf(more));

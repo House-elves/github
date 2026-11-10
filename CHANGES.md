@@ -3,6 +3,11 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.10.1
+
+- Your PRs waiting on others show Self-review as their button, so you can have the agent look over your own PR
+  while you wait. It used to be under ⋯.
+
 ## 1.10.0
 
 - New: voice input. A 🎤 next to "Ask the agent" and "Reply to the agent" on an item's thread: say it, and the words
