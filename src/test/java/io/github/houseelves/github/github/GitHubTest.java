@@ -78,6 +78,21 @@ class GitHubTest {
     }
 
     @Test
+    void anIssueKnowsWhetherYouCanWriteToItsRepo() throws Exception {
+        // The cap on open PRs leaves out repos you maintain: issues need the permission too, not only PRs.
+        String issueFields = GitHub.ITEM_FIELDS.substring(GitHub.ITEM_FIELDS.indexOf("... on Issue"),
+                GitHub.ITEM_FIELDS.indexOf("... on PullRequest"));
+        assertTrue(issueFields.contains("viewerPermission"), issueFields);
+        Item i = GitHub.toItem(json("""
+                {"__typename": "Issue", "number": 7, "title": "t", "url": "u", "createdAt": "2026-10-01T10:00:00Z",
+                 "updatedAt": "2026-10-02T10:00:00Z",
+                 "repository": {"nameWithOwner": "House-elves/github", "viewerPermission": "ADMIN"},
+                 "author": null, "assignees": {"nodes": []}, "comments": {"totalCount": 0}}
+                """));
+        assertEquals(Boolean.TRUE, i.canWrite());
+    }
+
+    @Test
     void anyRunningCheckMeansInProgressEvenWhenGitHubSaysFailure() throws Exception {
         // quarkusio/quarkus#56953 during a re-run: the gate status still fails, one job is running again.
         assertEquals("PENDING", GitHub.ciState(json("""

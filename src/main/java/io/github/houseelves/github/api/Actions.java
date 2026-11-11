@@ -117,6 +117,7 @@ public class Actions {
             case "rename-account" -> api.renameAccount(text(p, "login"), text(p, "name"));
             case "remove-account" -> api.removeAccount(text(p, "login"));
             case "set-refresh-minutes" -> api.setRefreshMinutes(p.path("minutes").asInt());
+            case "set-max-open-prs" -> api.setMaxOpenPrs(p.path("max").asInt(-1));
             case "seen" -> api.seen(key(p));
             case "post-done" -> api.postDone(p.path("draftId").asLong(), p.path("status").asInt(), p.path("error").asText(null));
             case "squash-done" -> api.squashDone(key(p), p.path("status").asInt(), squashed(p.path("file").asText(null)),

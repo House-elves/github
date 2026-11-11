@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -334,7 +335,7 @@ class ThreadFlowTest {
                 """.formatted(base, fix, fix)));
         ThreadView v = threads.view(issue);
         assertEquals("pr", v.draft().kind());
-        assertEquals("Lists the root logger.\n\nFixes #32850", v.draft().pr().body());
+        assertEquals("Lists the root logger.\n\nFixes #32850\n\n" + ThreadService.DISCLOSURE, v.draft().pr().body());
         long draftId = v.draft().id();
 
         // No fork: refused before anything is sent.
@@ -362,7 +363,7 @@ class ThreadFlowTest {
 
         // The runner pushed: post-done opens the PR, as a draft, once.
         when(writes.createPull("quarkusio/quarkus", "Let the Dev UI set the root log level", "phillip-kruger:fix-32850-aaaaaaa",
-                "main", "Lists the root logger.\n\nFixes #32850", true))
+                "main", "Lists the root logger.\n\nFixes #32850\n\n" + ThreadService.DISCLOSURE, true))
                 .thenReturn(mapper.readTree("{\"html_url\": \"https://github.com/quarkusio/quarkus/pull/57300\"}"));
         Poster.Posted posted = again().poster.postDone(draftId, 200, null, "phillip-kruger");
         assertEquals("https://github.com/quarkusio/quarkus/pull/57300", posted.url());
@@ -500,5 +501,45 @@ class ThreadFlowTest {
 
         next.threads.agentDone(agent); // again: already taken in
         assertEquals(2, again().threads.view(KEY).turns().size());
+    }
+
+    @Test
+    void fixWaitsAtTheCapOnOpenPrsButNotInReposYouMaintain() {
+        String issue = "quarkusio/quarkus#49879";
+        when(github.context(any(), eq("quarkusio/quarkus"), eq(49879)))
+                .thenReturn(Contexts.issue("quarkusio/quarkus", 49879, "MEMBER"));
+        when(github.openPrs(any(), eq("quarkusio/quarkus"), eq("phillip-kruger"))).thenReturn(new GitHub.OpenPrs(3, false));
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> threads.start(issue, Prompts.FIX, null, "phillip-kruger", "gho_t"));
+        assertTrue(e.getMessage().contains("3 open PRs in quarkusio/quarkus"), e.getMessage());
+        // Below the cap, or a repo you can write to: Fix starts.
+        when(github.openPrs(any(), eq("quarkusio/quarkus"), eq("phillip-kruger"))).thenReturn(new GitHub.OpenPrs(9, true));
+        threads.start(issue, Prompts.FIX, null, "phillip-kruger", "gho_t");
+        assertEquals(Prompts.FIX, store.job(threads.view(issue).job().id()).action);
+    }
+
+    @Test
+    void investigateIsNotCapped() {
+        String issue = "quarkusio/quarkus#49880";
+        when(github.context(any(), eq("quarkusio/quarkus"), eq(49880)))
+                .thenReturn(Contexts.issue("quarkusio/quarkus", 49880, "MEMBER"));
+        when(github.openPrs(any(), any(), any())).thenReturn(new GitHub.OpenPrs(10, false));
+        threads.start(issue, Prompts.INVESTIGATE, null, "phillip-kruger", "gho_t");
+        verify(github, never()).openPrs(any(), any(), any());
+    }
+
+    @Test
+    void theOverlapNoteGivesEachPrsTitleAuthorAndLabels() {
+        String note = ThreadService.overlapNote(List.of(new GitHub.LinkedPr("quarkusio/quarkus#9", "Fix the root logger",
+                "https://github.com/quarkusio/quarkus/pull/9", "someone", true, true, List.of("area/dev-ui"))),
+                List.of("other"));
+        assertTrue(note.contains("[quarkusio/quarkus#9](https://github.com/quarkusio/quarkus/pull/9) `Fix the root logger`"
+                + " (by @someone, draft, says it fixes this) `area/dev-ui`"), note);
+        // A title can't add a link or an image to the thread.
+        assertEquals("`![x](https://evil.example/x.png) 'y'`", ThreadService.code("![x](https://evil.example/x.png)\n`y`"));
+        assertTrue(note.contains("Also assigned to @other"), note);
+        assertEquals(null, ThreadService.overlapNote(List.of(), List.of()));
+        assertTrue(ThreadService.claimsSection(List.of("other"), List.of("triage/needs-reproducer"))
+                .contains("Also assigned to: @other\nLabels: triage/needs-reproducer"));
     }
 }

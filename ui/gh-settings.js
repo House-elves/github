@@ -398,6 +398,16 @@ class GhSettings extends LitElement {
                         ${[2, 5, 10, 15, 30, 60].map(m => html`<option value=${m} ?selected=${m === s.refreshMinutes}>${m} minutes</option>`)}
                     </select>
                     ${this._spin('refresh')}
+                    <label for="max-open-prs" title="Busy projects cap each contributor's open PRs; Fix waits while you're at the cap">Fix waits while you have this many open PRs in a repo</label>
+                    <select id="max-open-prs" ?disabled=${this._busy !== null}
+                            @change=${e => {
+                                const max = Number(e.target.value);
+                                this._do('max-open-prs', () => act('set-max-open-prs', { max }));
+                            }}>
+                        ${[...new Set([1, 2, 3, 5, 10, s.maxOpenPrs ?? 3])].filter(m => m > 0).sort((a, b) => a - b).concat(0)
+                            .map(m => html`<option value=${m} ?selected=${m === (s.maxOpenPrs ?? 3)}>${m === 0 ? 'No limit' : m}</option>`)}
+                    </select>
+                    ${this._spin('max-open-prs')}
                 </div>
             </section>
         `;

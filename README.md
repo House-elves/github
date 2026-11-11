@@ -21,7 +21,8 @@ The runner runs it with jbang (`GitHubElf.java`). It needs `gh`, `git` and `clau
 |------------------|----------------------------------------------------------------------------------------|
 | `GITHUB_ACCOUNT` | The `gh` account the elf works as. Its token is `gh auth token -u <account>`, read fresh for each run, never written anywhere or logged. |
 
-The board's own settings (its accounts, what it watches, the repos you maintain, refresh minutes) are at the top of
+The board's own settings (its accounts, what it watches, the repos you maintain, refresh minutes, how many open PRs
+of yours a repo you don't maintain may have before Fix waits) are at the top of
 its Settings pop-up, drawn by the elf; the account, version, updates and removing it follow, from the desk.
 They're kept in `state/`, not in the config file.
 

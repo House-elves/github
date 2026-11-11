@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.13.0
+version: 1.14.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -254,6 +254,12 @@ actions:
     ask: false
     params:
       login: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39}
+  set-max-open-prs:
+    label: Set the most open PRs of yours per repo before Fix waits
+    args: [--action=set-max-open-prs]
+    ask: false
+    params:
+      max: {kind: int}
   set-refresh-minutes:
     label: Set how often the board refreshes
     args: [--action=set-refresh-minutes]

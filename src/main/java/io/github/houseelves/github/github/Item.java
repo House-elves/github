@@ -17,6 +17,7 @@ import java.util.List;
  * @param canWrite       you have write access to the repo (which GitHub needs to re-run its workflows), or null when
  *                       not known
  * @param commitCount    PRs only: how many commits it has, or null when not known
+ * @param labels         its labels (the first few), shown with its link: a bare number tells the reader nothing
  */
 public record Item(
         String key,
@@ -39,9 +40,22 @@ public record Item(
         String mergeState,
         Boolean approved,
         Boolean canWrite,
-        Integer commitCount) {
+        Integer commitCount,
+        List<String> labels) {
 
     public enum Kind { PR, ISSUE }
+
+    public Item {
+        labels = labels == null ? List.of() : List.copyOf(labels);
+    }
+
+    public Item(String key, String repo, int number, Kind kind, String title, String url, String author,
+            List<String> assignees, Instant createdAt, Instant updatedAt, int comments, Boolean draft, String headRef,
+            String headSha, String ci, String reviewDecision, String mergeable, String mergeState, Boolean approved,
+            Boolean canWrite, Integer commitCount) {
+        this(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft, headRef,
+                headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, List.of());
+    }
 
     public Item(String key, String repo, int number, Kind kind, String title, String url, String author,
             List<String> assignees, Instant createdAt, Instant updatedAt, int comments, Boolean draft, String headRef,
@@ -76,7 +90,7 @@ public record Item(
      */
     public Item withCi(String newCi) {
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, headSha, newCi, reviewDecision, mergeable, isPr() ? "UNKNOWN" : mergeState, approved, canWrite, commitCount);
+                headRef, headSha, newCi, reviewDecision, mergeable, isPr() ? "UNKNOWN" : mergeState, approved, canWrite, commitCount, labels);
     }
 
     /** The same PR with the details search can't afford: merge state, and CI waiting for approval. */
@@ -92,7 +106,7 @@ public record Item(
         String newCi = awaitingApproval ? GitHub.AWAITING_APPROVAL
                 : passedOnRerun && ("FAILURE".equals(ci) || "ERROR".equals(ci)) ? "SUCCESS" : ci;
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, headSha, newCi, reviewDecision, mergeable, newMergeState, approved, canWrite, commitCount);
+                headRef, headSha, newCi, reviewDecision, mergeable, newMergeState, approved, canWrite, commitCount, labels);
     }
 
     /**
@@ -101,7 +115,7 @@ public record Item(
      */
     public Item withHead(String newHeadSha) {
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, newHeadSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount).withCi("PENDING");
+                headRef, newHeadSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels).withCi("PENDING");
     }
 
     /** The same item with {@code login} added to its assignees (right after you assign yourself). */
@@ -110,7 +124,7 @@ public record Item(
         List<String> more = new java.util.ArrayList<>(assignees);
         more.add(login);
         return new Item(key, repo, number, kind, title, url, author, List.copyOf(more), createdAt, updatedAt, comments,
-                draft, headRef, headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount);
+                draft, headRef, headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels);
     }
 
     /** GitHub says every required check passed and nothing else blocks merging. */

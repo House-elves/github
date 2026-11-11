@@ -260,8 +260,18 @@ export function linksFor(issueKey) {
 
 /** "Fixed by #12" or "Mentioned in #12" chips, linking to the PR's thread here. */
 export function linkedPrChips(issueKey) {
+    // The title (and labels) with the link: a bare #123 tells you nothing.
     return linksFor(issueKey).slice(0, 3).map(pr => html`<a class="chip ${pr.fixes ? 'run' : ''}" href=${threadHref(pr.key)}
-        title="${pr.title} (by ${pr.author}${pr.draft ? ', draft' : ''})">${pr.fixes ? 'Fixed by' : 'Mentioned in'} ${prRef(issueKey, pr.key)}</a>`);
+        title="${pr.title} (by ${pr.author}${pr.draft ? ', draft' : ''})${pr.labels?.length ? ' [' + pr.labels.join(', ') + ']' : ''}">${pr.fixes ? 'Fixed by' : 'Mentioned in'} ${prRef(issueKey, pr.key)}: ${short(pr.title)}</a>`);
+}
+
+function short(s) {
+    return s && s.length > 40 ? s.slice(0, 39) + '…' : (s ?? '');
+}
+
+/** An item's labels, as quiet chips next to its link. */
+export function labelChips(item) {
+    return (item.labels ?? []).map(l => html`<span class="chip label" title="Label">${l}</span>`);
 }
 
 /** #12 in the same repo, owner/repo#12 elsewhere. */
