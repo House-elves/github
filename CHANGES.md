@@ -3,6 +3,14 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.12.0
+
+- New: **Merged, to backport?** at the bottom of the board: the PRs you're involved in that were merged in the last
+  7 days, in repos with backport labels (Quarkus' `triage/backport`, `triage/backport-3.40`...). **Backport…** lets you
+  pick the branch; the PR is first tried as a cherry-pick onto it, and only a clean one is offered the label, which you
+  confirm in the desk's bar. A conflict names the files, and no label goes on. `triage/backport` means the newest
+  release branch (4.0 now).
+
 ## 1.11.0
 
 - An issue your own open PR fixes is off the board while that PR is on it: the PR's row shows **Fixes #12** (a link to

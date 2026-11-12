@@ -45,6 +45,7 @@ public class GitHubWriter {
     static final Pattern ISSUES = Pattern.compile(REPO + "/issues");
     static final Pattern PULLS = Pattern.compile(REPO + "/pulls");
     static final Pattern MERGE_UPSTREAM = Pattern.compile(REPO + "/merge-upstream");
+    static final Pattern LABELS = Pattern.compile(REPO + "/issues/\\d+/labels");
     public static final Pattern REPO_NAME = Pattern.compile("[A-Za-z0-9-]+/[A-Za-z0-9._-]+");
     public static final Pattern BRANCH = Pattern.compile("[A-Za-z0-9._/-]{1,250}");
     public static final Pattern SHA = Pattern.compile("[0-9a-f]{40}");
@@ -142,6 +143,11 @@ public class GitHubWriter {
     /** Brings a branch of your fork up to date with its upstream, as GitHub's "Sync fork" does. */
     public JsonNode syncFork(String fork, String branch) {
         return write("POST", "/repos/" + fork + "/merge-upstream", Map.of("branch", branch));
+    }
+
+    /** Adds one backport label (triage/backport-3.40, say) to a merged PR: no other label. */
+    public JsonNode addBackportLabel(String repo, int number, String label) {
+        return write("POST", "/repos/" + repo + "/issues/" + number + "/labels", Map.of("labels", List.of(label)));
     }
 
     /** Closes an issue or PR. */
@@ -291,6 +297,9 @@ public class GitHubWriter {
                             && body.path("reviewers").size() >= 1 && body.path("reviewers").size() <= 10
                             && java.util.stream.StreamSupport.stream(body.path("reviewers").spliterator(), false)
                                     .allMatch(r -> r.asText().matches("[A-Za-z0-9-]{1,39}") && !r.asText().equalsIgnoreCase(self)))
+                    // One backport label, after its cherry-pick was tried.
+                    || (LABELS.matcher(path).matches() && body.size() == 1 && body.path("labels").size() == 1
+                            && io.github.houseelves.github.backport.Backports.LABEL.matcher(body.path("labels").path(0).asText()).matches())
                     // Assign yourself, and only yourself.
                     || (ASSIGNEES.matcher(path).matches() && body.size() == 1 && body.path("assignees").size() == 1
                             && self != null && self.equalsIgnoreCase(body.path("assignees").path(0).asText()));

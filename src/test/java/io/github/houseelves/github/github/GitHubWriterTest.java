@@ -132,4 +132,15 @@ class GitHubWriterTest {
         assertEquals("a".repeat(40), queries.get(1).path("variables").path("head").asText());
         assertThrows(GitHubWriter.WriteFailed.class, () -> writer(200, "{}", null).updateBranch("a/b", 3, "a".repeat(40), "MERGE"));
     }
+
+    @Test
+    void theWriterAddsOneBackportLabelOnly() {
+        ObjectMapper m = new ObjectMapper();
+        assertTrue(GitHubWriter.allowedWrite("POST", "/repos/quarkusio/quarkus/issues/5/labels",
+                m.createObjectNode().set("labels", m.createArrayNode().add("triage/backport-3.40")), "me"));
+        assertFalse(GitHubWriter.allowedWrite("POST", "/repos/quarkusio/quarkus/issues/5/labels",
+                m.createObjectNode().set("labels", m.createArrayNode().add("area/core")), "me"));
+        assertFalse(GitHubWriter.allowedWrite("POST", "/repos/quarkusio/quarkus/issues/5/labels",
+                m.createObjectNode().set("labels", m.createArrayNode().add("triage/backport").add("triage/backport-3.40")), "me"));
+    }
 }

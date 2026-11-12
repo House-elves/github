@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.11.0
+version: 1.12.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -10,11 +10,13 @@ config: ~/.config/github/config
 tools: [gh, git, claude]
 
 reads:
+  - The PRs you're involved in that were merged in the last 7 days, in repos with backport labels, for the board's Merged list.
   - The open issues and PRs you're involved in on GitHub, with their CI, reviews and merge state, as each gh account the board works as (the elf's own, and any you add in its Settings).
   - The runner's reports on the agents this elf starts.
 writes:
   - The board, its threads and its settings (the gh accounts it works as, by login and the name you give each), in ~/.config/github/.
-  - On GitHub, only when you click and confirm it in the desk's bar, as the gh account the item belongs to (the one that found it, which the bar names) - reviews, comments, new issues and PRs, closing and assigning, asking reviewers to review again, merges pinned to the head you saw, CI re-runs and approvals, branch updates.
+  - On GitHub, only when you click and confirm it in the desk's bar, as the gh account the item belongs to (the one that found it, which the bar names) - reviews, comments, new issues and PRs, closing and assigning, asking reviewers to review again, merges pinned to the head you saw, CI re-runs and approvals, branch updates, and a backport label (triage/backport-3.40, say) on a merged PR once it cherry-picks cleanly onto that branch.
+  - A bare, blobless copy of each repo you backport from, in ~/.config/github/git/, to try the cherry-pick.
   - Pushes the agent's commits (through the runner) when you confirm the push.
 
 settings:
@@ -289,6 +291,15 @@ actions:
     params:
       id: {pattern: '[a-z0-9][a-z0-9-]{0,79}', max: 80}
 
+  backport-check:
+    label: Try a merged PR as a cherry-pick onto a backport label's branch
+    args: [--action=backport-check]
+    ask: false
+    params:
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      label: {pattern: '([A-Za-z0-9 _.-]{1,40}/)?backport(-[0-9][A-Za-z0-9.]{0,20})?\??', max: 80}
+
   # ---- agent starts: they write nothing to GitHub ----
 
   start:
@@ -459,3 +470,15 @@ actions:
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       method: {one-of: [merge, squash, rebase]}
       headSha: {pattern: '[0-9a-f]{40}', max: 40}
+  # Tried as a cherry-pick onto the branch again first: the label goes on only if it's clean.
+  backport:
+    label: Add a backport label to a merged PR
+    args: [--action=backport]
+    confirm: "Add the label {label} to {itemKey} on GitHub, as {as}? It cherry-picks cleanly onto {branch}, which is checked again first."
+    params:
+      # The account it's done as: the one whose Merged list has it.
+      as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
+      label: {pattern: '([A-Za-z0-9 _.-]{1,40}/)?backport(-[0-9][A-Za-z0-9.]{0,20})?\??', max: 80}
+      # For the confirm bar's words: the elf works the branch out from the label itself.
+      branch: {pattern: '[0-9]+\.[0-9]+', max: 20}

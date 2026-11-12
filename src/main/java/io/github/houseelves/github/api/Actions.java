@@ -31,12 +31,12 @@ public class Actions {
 
     /** Reads that only ask GitHub: they don't wait for a refresh to finish. */
     public static final Set<String> READS = Set.of("about", "pr-diff", "pr-activity", "pr-reviews", "commit-count",
-            "merge-options", "conflict-options");
+            "merge-options", "conflict-options", "backport-check");
 
     /** What isn't doing something with an item: reading it, and the runner's callbacks. Any other action takes it out of Later. */
     static final Set<String> NOT_DOING = Set.of("item", "about", "thread", "pr-diff", "pr-activity", "pr-reviews", "ci-report",
             "conflict-options", "commit-count", "merge-options", "merge-status", "suggestions", "preview-post", "settings",
-            "is-ignored", "seen", "post-done", "squash-done", "agent-done", "later", "now");
+            "is-ignored", "seen", "post-done", "squash-done", "agent-done", "later", "now", "backport-check", "backport");
 
     /** Reads whose answers go in cache/. */
     static final Set<String> TO_FILE = Set.of("pr-diff", "pr-activity", "pr-reviews", "ci-report");
@@ -58,6 +58,8 @@ public class Actions {
         JsonNode p = params == null || params.isNull() ? mapper.createObjectNode() : params;
         // Done as the account the item belongs to: the one that found it.
         elf.accounts.actFor(itemOf(p));
+        // A merged PR isn't on the board: its Merged list says which account found it.
+        if (action.startsWith("backport") && p.path("as").isTextual()) elf.accounts.actAs(p.path("as").asText());
         // What the desk's bar said it's done as must be who does it.
         if (p.path("as").isTextual() && !p.path("as").asText().equalsIgnoreCase(elf.accounts.login())) {
             throw new IllegalArgumentException("That's " + elf.accounts.login() + "'s now, not " + p.path("as").asText()
@@ -154,6 +156,9 @@ public class Actions {
             }
             case "merge-on-green" -> api.mergeOnGreen(key(p), text(p, "method"), text(p, "headSha"));
             case "merge-without-approval" -> api.mergeWithoutApproval(key(p), text(p, "method"), text(p, "headSha"));
+            // backports: tried as a cherry-pick, then (your click) the label
+            case "backport-check" -> elf.backports.withToken(token.get()).check(token.get(), key(p), text(p, "label"));
+            case "backport" -> backport(key(p), text(p, "label"));
             default -> throw new IllegalArgumentException("Not one of the GitHub elf's actions: " + action);
         };
         // You did something with it: if it was put aside for later, it's your move again.
@@ -163,6 +168,52 @@ public class Actions {
             return toFile(action, p, json);
         }
         return json;
+    }
+
+    /**
+     * Adds a backport label to a merged PR, only once it cherry-picks cleanly onto the label's branch (tried again
+     * here, right before). Then the board's Merged list shows the label.
+     */
+    private io.github.houseelves.github.backport.Backports.Check backport(String itemKey, String label) {
+        var check = elf.backports.withToken(token.get()).check(token.get(), itemKey, label);
+        if (!check.clean()) {
+            throw new IllegalStateException(itemKey + " doesn't cherry-pick cleanly onto " + check.branch() + " (conflicts in "
+                    + String.join(", ", check.conflicts()) + "), so " + label + " wasn't added.");
+        }
+        if (!check.labelled()) {
+            String repo = itemKey.substring(0, itemKey.indexOf('#'));
+            int number = Integer.parseInt(itemKey.substring(itemKey.indexOf('#') + 1));
+            elf.writer.addBackportLabel(repo, number, label);
+            io.github.houseelves.github.thread.GitHubAction a = new io.github.houseelves.github.thread.GitHubAction();
+            DeskThread t = elf.store.byKey(itemKey);
+            a.threadId = t == null ? null : t.id;
+            a.kind = "label";
+            a.request = mapper.createObjectNode().put("item", itemKey).put("label", label).toString();
+            a.resultUrl = "https://github.com/" + repo + "/pull/" + number;
+            a.login = elf.accounts.login();
+            elf.store.audit(a);
+            labelled(itemKey, label);
+        }
+        return new io.github.houseelves.github.backport.Backports.Check(itemKey, label, check.branch(), true, List.of(), true);
+    }
+
+    /** board/merged.json with the label on the item, so the list shows it before the next refresh. */
+    private void labelled(String itemKey, String label) {
+        java.nio.file.Path f = elf.home.board().resolve("merged.json");
+        try {
+            if (!java.nio.file.Files.exists(f)) return;
+            ObjectNode view = (ObjectNode) mapper.readTree(f.toFile());
+            for (JsonNode i : view.path("items")) {
+                if (i.path("key").asText().equals(itemKey) && i.path("labels").isArray()) {
+                    boolean has = false;
+                    for (JsonNode l : i.path("labels")) has |= l.asText().equals(label);
+                    if (!has) ((com.fasterxml.jackson.databind.node.ArrayNode) i.path("labels")).add(label);
+                }
+            }
+            Json.write(f, view);
+        } catch (Exception e) {
+            // The next refresh shows it.
+        }
     }
 
     /** An agent start's answer: the thread, and the agent for the runner to start (if a new one was asked for). */

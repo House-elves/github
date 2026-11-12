@@ -13,6 +13,7 @@ import './conflict-menu.js';
 import './pr-activity.js';
 import './pr-review.js';
 import './gh-thread.js';
+import './backport-list.js';
 
 const DATE = new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -793,6 +794,7 @@ class GhBoard extends LitElement {
                 <div class="sections">
                     ${b.scopeEmpty ? '' : this._renderFilter(all, rows.length)}
                     ${SECTIONS.map(s => this._renderSection(s, by[s.id]))}
+                    <backport-list .filterText=${this._filter.text.trim()}></backport-list>
                     ${this._renderHidden(hidden)}
                     ${this._renderIgnored(ignored)}
                 </div>

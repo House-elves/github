@@ -41,6 +41,8 @@ public class Elf {
     public final CiService ci;
     public final ConflictService conflicts;
     public final BoardApi api;
+    /** Backport labels on merged PRs, each tried as a cherry-pick first (git in git/). Tests replace it. */
+    public io.github.houseelves.github.backport.Backports backports;
 
     /** The real thing: GitHub with each account's token, from gh. */
     public static Elf real(Home home, String primary) {
@@ -73,5 +75,6 @@ public class Elf {
         this.conflicts = new ConflictService(github, writer, threads, store, live);
         this.api = new BoardApi(accounts, boards, scopes, settings, threads, poster, merges, ci,
                 github, conflicts, ignores, later, live);
+        this.backports = io.github.houseelves.github.backport.Backports.real(home.dir().resolve("git"));
     }
 }

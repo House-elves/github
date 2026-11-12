@@ -142,11 +142,29 @@ public class GitHubElf {
             }
         }
         if (fetched.isEmpty()) throw new IllegalStateException("Couldn't read GitHub as " + String.join(", ", failed));
+        // Merged PRs you can ask to backport (in repos with backport labels): a failure here leaves the list as it was.
+        List<io.github.houseelves.github.backport.Backports.Merged> merged = null;
+        try {
+            java.time.Instant now = java.time.Instant.now();
+            Map<String, io.github.houseelves.github.backport.Backports.Merged> byKey = new LinkedHashMap<>();
+            for (String l : logins) {
+                for (var m : reader.backports.recent(l, reader.accounts.token(l), now)) byKey.putIfAbsent(m.key(), m);
+            }
+            merged = byKey.values().stream().sorted(java.util.Comparator.comparing(
+                    io.github.houseelves.github.backport.Backports.Merged::mergedAt,
+                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))).toList();
+        } catch (RuntimeException e) {
+            System.err.println("Reading merged PRs to backport failed: " + e.getMessage());
+        }
         Board b;
         try (ElfLock lock = ElfLock.take(home.state())) {
             Elf elf = Elf.real(home, primary);
             b = elf.api.refresh(fetched);
             Views.writeAll(elf);
+            if (merged != null) {
+                io.github.houseelves.github.elf.Json.write(home.board().resolve("merged.json"),
+                        io.github.houseelves.github.backport.Backports.view(java.time.Instant.now(), merged));
+            }
         }
         System.out.println("Refreshed the board for " + fetched.stream().map(f -> f.fetched().login())
                 .collect(Collectors.joining(", ")) + ": " + count(b) + " items"
