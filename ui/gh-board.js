@@ -93,6 +93,15 @@ const CALLS = {
 const PANEL_STEPS = new Set(['self-fix', 'ci-fix', 'ci-why', 'ci-rerun', 'ci-reopen', 'conflicts', 'address', 'fix', 'investigate', 'review']);
 
 /** What the agents on every item cost together, or null when none said. */
+/**
+ * The PR that takes an issue's place on the board: your own open PR that fixes it (its flow points there, waiting on
+ * others), when that PR is on the board too. Null otherwise.
+ */
+function fixedByMine(b, flow) {
+    const target = flow?.role === 'issue' && flow.waiting === 'others' && flow.next?.id === 'go' ? flow.next.target : null;
+    return target && b.flows?.[target] ? target : null;
+}
+
 function aiTotal(b) {
     const costs = Object.values(b?.threads ?? {}).map(t => t.cost).filter(c => c != null).map(Number);
     return costs.length ? costs.reduce((x, y) => x + y, 0) : null;
@@ -625,10 +634,20 @@ class GhBoard extends LitElement {
         `;
     }
 
-    /** Every item with its flow, from the lanes. */
+    /**
+     * Every item with its flow, from the lanes. An issue your own PR fixes is left out while that PR is on the board:
+     * the PR's row shows it (Fixes #12), and the issue comes back if the PR closes without fixing it.
+     */
     _rows(b) {
         const items = b.lanes.flatMap(l => l.items);
-        return items.map(item => ({ item, flow: b.flows?.[item.key] })).filter(r => r.flow);
+        return items.map(item => ({ item, flow: b.flows?.[item.key] })).filter(r => r.flow && !fixedByMine(b, r.flow));
+    }
+
+    /** The issues this PR's row stands for: those it fixes that are left off the board for it. */
+    _fixes(item) {
+        const b = this._board;
+        if (item.kind !== 'PR' || !b) return [];
+        return b.lanes.flatMap(l => l.items).filter(i => i.kind === 'ISSUE' && fixedByMine(b, b.flows?.[i.key]) === item.key);
     }
 
     _setFilter(f) {
@@ -838,6 +857,8 @@ class GhBoard extends LitElement {
                         ${f.since ? html`<span>${ago(f.since)}</span>` : ''}
                         ${back ? html`<span class="chip run" title="It was ignored; this brought it back">Back: ${back.toLowerCase()}</span>` : ''}
                         ${item.kind === 'ISSUE' && f.role !== 'issue' ? linkedPrChips(item.key) : ''}
+                        ${this._fixes(item).map(i => html`<a class="chip ok" href=${i.url} target="_blank" rel="noopener"
+                            title="It fixes ${i.title}: the issue is off the board while this PR is open">Fixes ${i.repo === item.repo ? '' : i.repo}#${i.number}</a>`)}
                         ${this._commitsChip(item, f)}
                         ${this._board?.threads?.[item.key]?.cost != null
                             ? html`<span class="cost" title=${COST_HINT}>AI ${usd(this._board.threads[item.key].cost)}</span>` : ''}

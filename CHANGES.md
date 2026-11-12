@@ -3,6 +3,11 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.11.0
+
+- An issue your own open PR fixes is off the board while that PR is on it: the PR's row shows **Fixes #12** (a link to
+  the issue) instead. If the PR closes without fixing it, the issue's row comes back.
+
 ## 1.10.1
 
 - Your PRs waiting on others show Self-review as their button, so you can have the agent look over your own PR
