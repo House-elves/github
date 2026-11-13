@@ -442,5 +442,9 @@ class GitHubTest {
         assertEquals(java.time.Instant.parse("2026-11-13T07:00:00Z"), GitHub.othersAt(pr, "me"));
         assertTrue(GitHub.isBot(new com.fasterxml.jackson.databind.ObjectMapper().readTree("{\"login\": \"sonarqubecloud\"}")));
         assertNull(GitHub.qualityGate(new com.fasterxml.jackson.databind.ObjectMapper().readTree("{}")));
+        // A person can't pass it off as SonarQube Cloud's.
+        assertNull(GitHub.qualityGate(new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"comments": {"nodes": [{"createdAt": "2026-11-13T09:00:00Z", "body": "Quality Gate passed",
+                  "author": {"__typename": "User", "login": "sonarqubecloud-fan"}}]}}""")));
     }
 }

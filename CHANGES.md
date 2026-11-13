@@ -3,6 +3,10 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.16.1
+
+- The SonarQube chip only trusts SonarQube Cloud's own app, not a person with a look-alike name.
+
 ## 1.16.0
 
 - A bot's comment (SonarQube Cloud's quality gate, a coverage report) no longer makes a PR you reviewed show as

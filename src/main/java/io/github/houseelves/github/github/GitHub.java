@@ -920,6 +920,7 @@ public class GitHub {
     static final Set<String> SERVICE_BOTS = Set.of("sonarqubecloud", "sonarcloud", "codecov", "coveralls", "netlify",
             "vercel");
 
+    private static final Set<String> SONAR = Set.of("sonarqubecloud", "sonarcloud");
     private static final java.util.regex.Pattern GATE = java.util.regex.Pattern.compile("Quality Gate (passed|failed)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
@@ -930,8 +931,9 @@ public class GitHub {
     static String qualityGate(JsonNode pr) {
         String gate = null;
         for (JsonNode n : pr.path("comments").path("nodes")) {
-            String by = n.path("author").path("login").asText("").toLowerCase(java.util.Locale.ROOT);
-            if (!by.startsWith("sonarqubecloud") && !by.startsWith("sonarcloud")) continue;
+            // Only SonarQube Cloud's own app: a person can't write as a Bot, and a look-alike login doesn't count.
+            String by = n.path("author").path("login").asText("");
+            if (!"Bot".equals(n.path("author").path("__typename").asText()) || !SONAR.contains(by)) continue;
             var m = GATE.matcher(n.path("body").asText(""));
             if (m.find()) gate = m.group(1).toLowerCase(java.util.Locale.ROOT);
         }
