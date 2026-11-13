@@ -162,6 +162,8 @@ public class GitHubElf {
             b = elf.api.refresh(fetched);
             Views.writeAll(elf);
             if (merged != null) {
+                var skipped = io.github.houseelves.github.backport.Backports.skipped(home.state());
+                merged = merged.stream().filter(m -> !skipped.containsKey(m.key())).toList();
                 io.github.houseelves.github.elf.Json.write(home.board().resolve("merged.json"),
                         io.github.houseelves.github.backport.Backports.view(java.time.Instant.now(), merged));
             }

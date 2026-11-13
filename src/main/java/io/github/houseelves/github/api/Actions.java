@@ -36,7 +36,7 @@ public class Actions {
     /** What isn't doing something with an item: reading it, and the runner's callbacks. Any other action takes it out of Later. */
     static final Set<String> NOT_DOING = Set.of("item", "about", "thread", "pr-diff", "pr-activity", "pr-reviews", "ci-report",
             "conflict-options", "commit-count", "merge-options", "merge-status", "suggestions", "preview-post", "settings",
-            "is-ignored", "seen", "post-done", "squash-done", "agent-done", "later", "now", "backport-check", "backport");
+            "is-ignored", "seen", "post-done", "squash-done", "agent-done", "later", "now", "backport-check", "backport", "backport-skip");
 
     /** Reads whose answers go in cache/. */
     static final Set<String> TO_FILE = Set.of("pr-diff", "pr-activity", "pr-reviews", "ci-report");
@@ -159,6 +159,7 @@ public class Actions {
             // backports: tried as a cherry-pick, then (your click) the label
             case "backport-check" -> elf.backports.withToken(token.get()).check(token.get(), key(p), text(p, "label"));
             case "backport" -> backport(key(p), text(p, "label"));
+            case "backport-skip" -> skipBackport(key(p));
             default -> throw new IllegalArgumentException("Not one of the GitHub elf's actions: " + action);
         };
         // You did something with it: if it was put aside for later, it's your move again.
@@ -195,6 +196,29 @@ public class Actions {
             labelled(itemKey, label);
         }
         return new io.github.houseelves.github.backport.Backports.Check(itemKey, label, check.branch(), true, List.of(), true);
+    }
+
+    /** Not to backport: it leaves the Merged list now, and stays off it. Nothing is written to GitHub. */
+    private ObjectNode skipBackport(String itemKey) {
+        try {
+            skipBackportIo(itemKey);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("Couldn't save it: " + e.getMessage(), e);
+        }
+        return mapper.createObjectNode().put("skipped", itemKey);
+    }
+
+    private void skipBackportIo(String itemKey) throws java.io.IOException {
+        io.github.houseelves.github.backport.Backports.skip(elf.home.state(), itemKey);
+        java.nio.file.Path f = elf.home.board().resolve("merged.json");
+        if (java.nio.file.Files.exists(f)) {
+            ObjectNode view = (ObjectNode) mapper.readTree(f.toFile());
+            var items = (com.fasterxml.jackson.databind.node.ArrayNode) view.path("items");
+            for (int i = items.size() - 1; i >= 0; i--) {
+                if (items.get(i).path("key").asText().equals(itemKey)) items.remove(i);
+            }
+            Json.write(f, view);
+        }
     }
 
     /** board/merged.json with the label on the item, so the list shows it before the next refresh. */

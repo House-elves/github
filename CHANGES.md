@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.13.0
+
+- **Don't backport** on a merged PR takes it off the Merged list for good, when it doesn't need a backport. Nothing changes
+  on GitHub. One that has its backport label already has **Done** instead, to clear it from the list.
+- The Merged list's heading looks like the board's other folded sections.
+
 ## 1.12.0
 
 - New: **Merged, to backport?** at the bottom of the board: the PRs you're involved in that were merged in the last

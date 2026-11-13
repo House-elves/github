@@ -34,7 +34,13 @@ class BackportList extends LitElement {
         .try { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
         .try code { font-size: 12px; }
         .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        summary { cursor: pointer; }
+        /* As the board's other folded sections (Just involved, ignored items). */
+        details summary {
+            cursor: pointer; color: var(--muted); font-weight: 500; padding: 4px 0; list-style-position: outside;
+        }
+        details summary:hover { color: var(--ink); }
+        details summary .n { font-variant-numeric: tabular-nums; }
+        details[open] summary { margin-bottom: 12px; }
         .hint { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
     `];
 
@@ -114,6 +120,9 @@ class BackportList extends LitElement {
                     ${left.length && this._picking !== item.key && !['checking', 'adding'].includes(t?.state)
                         ? html`<button class="sm" @click=${() => { this._picking = item.key; }}
                             title="Pick a branch: it's tried as a cherry-pick before the label goes on">Backport…</button>` : ''}
+                    ${!['checking', 'adding', 'skipping'].includes(t?.state)
+                        ? html`<button class="sm quiet" @click=${() => this._skip(item)}
+                            title="Takes it off this list for good; nothing changes on GitHub">${has.length ? 'Done' : "Don't backport"}</button>` : ''}
                 </div>
             </li>`;
     }
@@ -134,6 +143,8 @@ class BackportList extends LitElement {
                     <button class="sm quiet" @click=${() => this._forget(item)}>OK</button></div>`;
             case 'adding':
                 return html`<div class="try">${spinner} Adding ${t.label}…</div>`;
+            case 'skipping':
+                return html`<div class="try">${spinner} Taking it off the list…</div>`;
             case 'added':
                 return html`<div class="try"><span class="chip ok">Added ${t.label}</span></div>`;
             default:
@@ -161,6 +172,20 @@ class BackportList extends LitElement {
                 : { label: l.name, branch: c.branch, state: 'conflicts', conflicts: c.conflicts ?? [] });
         } catch (e) {
             this._set(item, { label: l.name, branch: l.branch, state: 'error', error: `Couldn't try it: ${errorMessage(e)}` });
+        }
+    }
+
+    /** Not to backport (or done with it): off the list, for good. */
+    async _skip(item) {
+        const was = this._tries[item.key];
+        this._picking = null;
+        this._set(item, { state: 'skipping' });
+        try {
+            await act('backport-skip', { itemKey: item.key });
+            this._forget(item);
+            this._merged = { ...this._merged, items: (this._merged?.items ?? []).filter(i => i.key !== item.key) };
+        } catch (e) {
+            this._set(item, { ...(was ?? {}), state: 'error', error: `Couldn't take it off: ${errorMessage(e)}` });
         }
     }
 

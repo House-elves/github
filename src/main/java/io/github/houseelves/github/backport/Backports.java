@@ -318,6 +318,41 @@ public class Backports {
         return git instanceof CliGit c ? new Backports(rest, c.withToken(token)) : this;
     }
 
+    /**
+     * The merged PRs you said not to backport, in state/backport-skipped.json ({key: when}): they leave the Merged list
+     * for good. Kept for a month, longer than a PR stays on the list.
+     */
+    public static Map<String, Instant> skipped(java.nio.file.Path stateDir) {
+        Map<String, Instant> out = new LinkedHashMap<>();
+        java.nio.file.Path f = stateDir.resolve("backport-skipped.json");
+        try {
+            if (java.nio.file.Files.exists(f)) {
+                JsonNode n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(f.toFile());
+                Instant cutoff = Instant.now().minus(java.time.Duration.ofDays(30));
+                n.fields().forEachRemaining(e -> {
+                    try {
+                        Instant at = Instant.parse(e.getValue().asText());
+                        if (at.isAfter(cutoff)) out.put(e.getKey(), at);
+                    } catch (Exception ignored) {
+                        // A broken entry is dropped.
+                    }
+                });
+            }
+        } catch (Exception e) {
+            LOG.warn("Couldn't read " + f + ": " + e.getMessage());
+        }
+        return out;
+    }
+
+    /** Not to backport: off the Merged list from now on. */
+    public static void skip(java.nio.file.Path stateDir, String itemKey) throws java.io.IOException {
+        Map<String, Instant> all = skipped(stateDir);
+        all.put(itemKey, Instant.now());
+        Map<String, String> out = new LinkedHashMap<>();
+        all.forEach((k, v) -> out.put(k, v.toString()));
+        io.github.houseelves.github.elf.Json.write(stateDir.resolve("backport-skipped.json"), out);
+    }
+
     /** board/merged.json: what the board's Merged list shows. */
     public static Map<String, Object> view(Instant at, List<Merged> merged) {
         Map<String, Object> out = new LinkedHashMap<>();

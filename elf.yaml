@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.12.0
+version: 1.13.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -299,6 +299,12 @@ actions:
       as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
       itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
       label: {pattern: '([A-Za-z0-9 _.-]{1,40}/)?backport(-[0-9][A-Za-z0-9.]{0,20})?\??', max: 80}
+  backport-skip:
+    label: Take a merged PR off the backport list, as not to backport
+    args: [--action=backport-skip]
+    ask: false
+    params:
+      itemKey: {pattern: '[A-Za-z0-9-]+/[A-Za-z0-9._-]+#\d+', max: 300}
 
   # ---- agent starts: they write nothing to GitHub ----
 

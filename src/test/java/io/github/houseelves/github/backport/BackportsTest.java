@@ -115,4 +115,15 @@ class BackportsTest {
         assertThrows(IllegalArgumentException.class, () -> backports().check("t", "quarkusio/quarkus#58273", "area/core"));
         assertTrue(tried.isEmpty());
     }
+
+    @Test
+    void notToBackportStaysOffTheList(@org.junit.jupiter.api.io.TempDir java.nio.file.Path state) throws Exception {
+        assertTrue(Backports.skipped(state).isEmpty());
+        Backports.skip(state, "quarkusio/quarkus#58273");
+        Backports.skip(state, "quarkusio/quarkus#58290");
+        assertEquals(java.util.Set.of("quarkusio/quarkus#58273", "quarkusio/quarkus#58290"), Backports.skipped(state).keySet());
+        // An old one is forgotten: the PR left the list long ago.
+        java.nio.file.Files.writeString(state.resolve("backport-skipped.json"), "{\"a/b#1\":\"2020-01-01T00:00:00Z\"}");
+        assertTrue(Backports.skipped(state).isEmpty());
+    }
 }
