@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.16.0
+
+- A bot's comment (SonarQube Cloud's quality gate, a coverage report) no longer makes a PR you reviewed show as
+  **Updated since your review**, and What's new leaves it out. Only people's reviews and comments, and new commits, count.
+- SonarQube Cloud's quality gate shows on the PR's row: **SonarQube passed**, or **SonarQube failed**.
+
 ## 1.15.0
 
 - A review drafted before the PR changed (its inline comments no longer in the diff) now has **Look again** and

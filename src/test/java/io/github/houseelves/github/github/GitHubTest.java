@@ -427,4 +427,20 @@ class GitHubTest {
                 """));
         assertEquals("Looks good, see the docs", GitHub.snippet("<!-- hi -->Looks **good**,\nsee [the docs](https://x)"));
     }
+
+    @Test
+    void sonarQubeCloudsGateShowsAndIsntNews() throws Exception {
+        JsonNode pr = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"allReviews": {"nodes": [{"state": "APPROVED", "submittedAt": "2026-11-13T08:00:00Z", "author": {"__typename": "User", "login": "me"}}]},
+                 "comments": {"nodes": [
+                   {"createdAt": "2026-11-13T07:00:00Z", "body": "looks fine", "author": {"__typename": "User", "login": "alice"}},
+                   {"createdAt": "2026-11-13T09:00:00Z", "body": "![Quality Gate Passed](https://sonarcloud.io/x) **Quality Gate passed**",
+                    "author": {"__typename": "Bot", "login": "sonarqubecloud"}}]}}
+                """);
+        assertEquals("passed", GitHub.qualityGate(pr));
+        // Only alice spoke, before the review: the quality gate comment after it isn't news.
+        assertEquals(java.time.Instant.parse("2026-11-13T07:00:00Z"), GitHub.othersAt(pr, "me"));
+        assertTrue(GitHub.isBot(new com.fasterxml.jackson.databind.ObjectMapper().readTree("{\"login\": \"sonarqubecloud\"}")));
+        assertNull(GitHub.qualityGate(new com.fasterxml.jackson.databind.ObjectMapper().readTree("{}")));
+    }
 }

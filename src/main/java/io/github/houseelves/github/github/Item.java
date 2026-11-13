@@ -18,6 +18,7 @@ import java.util.List;
  *                       not known
  * @param commitCount    PRs only: how many commits it has, or null when not known
  * @param labels         its labels (the first few), shown with its link: a bare number tells the reader nothing
+ * @param qualityGate    SonarQube Cloud's quality gate on it, "passed" or "failed", from its comment; null for none
  */
 public record Item(
         String key,
@@ -41,12 +42,21 @@ public record Item(
         Boolean approved,
         Boolean canWrite,
         Integer commitCount,
-        List<String> labels) {
+        List<String> labels,
+        String qualityGate) {
 
     public enum Kind { PR, ISSUE }
 
     public Item {
         labels = labels == null ? List.of() : List.copyOf(labels);
+    }
+
+    public Item(String key, String repo, int number, Kind kind, String title, String url, String author,
+            List<String> assignees, Instant createdAt, Instant updatedAt, int comments, Boolean draft, String headRef,
+            String headSha, String ci, String reviewDecision, String mergeable, String mergeState, Boolean approved,
+            Boolean canWrite, Integer commitCount, List<String> labels) {
+        this(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft, headRef,
+                headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels, null);
     }
 
     public Item(String key, String repo, int number, Kind kind, String title, String url, String author,
@@ -90,7 +100,7 @@ public record Item(
      */
     public Item withCi(String newCi) {
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, headSha, newCi, reviewDecision, mergeable, isPr() ? "UNKNOWN" : mergeState, approved, canWrite, commitCount, labels);
+                headRef, headSha, newCi, reviewDecision, mergeable, isPr() ? "UNKNOWN" : mergeState, approved, canWrite, commitCount, labels, qualityGate);
     }
 
     /** The same PR with the details search can't afford: merge state, and CI waiting for approval. */
@@ -106,7 +116,13 @@ public record Item(
         String newCi = awaitingApproval ? GitHub.AWAITING_APPROVAL
                 : passedOnRerun && ("FAILURE".equals(ci) || "ERROR".equals(ci)) ? "SUCCESS" : ci;
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, headSha, newCi, reviewDecision, mergeable, newMergeState, approved, canWrite, commitCount, labels);
+                headRef, headSha, newCi, reviewDecision, mergeable, newMergeState, approved, canWrite, commitCount, labels, qualityGate);
+    }
+
+    /** The same PR with SonarQube Cloud's quality gate ("passed" or "failed"), from its comment; null for none. */
+    public Item withQualityGate(String gate) {
+        return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
+                headRef, headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels, gate);
     }
 
     /**
@@ -115,7 +131,7 @@ public record Item(
      */
     public Item withHead(String newHeadSha) {
         return new Item(key, repo, number, kind, title, url, author, assignees, createdAt, updatedAt, comments, draft,
-                headRef, newHeadSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels).withCi("PENDING");
+                headRef, newHeadSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels, qualityGate).withCi("PENDING");
     }
 
     /** The same item with {@code login} added to its assignees (right after you assign yourself). */
@@ -124,7 +140,7 @@ public record Item(
         List<String> more = new java.util.ArrayList<>(assignees);
         more.add(login);
         return new Item(key, repo, number, kind, title, url, author, List.copyOf(more), createdAt, updatedAt, comments,
-                draft, headRef, headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels);
+                draft, headRef, headSha, ci, reviewDecision, mergeable, mergeState, approved, canWrite, commitCount, labels, qualityGate);
     }
 
     /** GitHub says every required check passed and nothing else blocks merging. */

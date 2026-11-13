@@ -624,8 +624,19 @@ public class GitHub {
      * @param passedOnRerun every check passes once failed workflow runs that a newer run of the same workflow
      *                      replaced are left out (see {@link #passedOnRerun}), which GitHub's rollup doesn't do
      */
+    /**
+     * @param othersAt when someone other than you and bots last reviewed or commented, {@link Instant#EPOCH} when
+     *                 nobody did, or null when not read: a bot's comment (SonarQube Cloud's quality gate, say) isn't
+     *                 news since your review
+     * @param qualityGate SonarQube Cloud's quality gate, "passed" or "failed", from its latest comment; null for none
+     */
     public record PrDetails(String mergeState, boolean awaitingApproval, Instant myReviewAt, String myReviewedSha,
-            Feedback feedback, boolean passedOnRerun) {
+            Feedback feedback, boolean passedOnRerun, Instant othersAt, String qualityGate) {
+
+        public PrDetails(String mergeState, boolean awaitingApproval, Instant myReviewAt, String myReviewedSha,
+                Feedback feedback, boolean passedOnRerun) {
+            this(mergeState, awaitingApproval, myReviewAt, myReviewedSha, feedback, passedOnRerun, null, null);
+        }
 
         public PrDetails(String mergeState, boolean awaitingApproval) {
             this(mergeState, awaitingApproval, null, null, null, false);
@@ -836,7 +847,8 @@ public class GitHub {
                 out.put(chunk.get(i), new PrDetails(textOrNull(pr.path("mergeStateStatus")),
                         !awaitingApproval(commit).isEmpty(),
                         instant(review.path("submittedAt")), textOrNull(review.path("commit").path("oid")),
-                        myPr ? feedback(pr, login) : null, passedOnRerun(commit)));
+                        myPr ? feedback(pr, login) : null, passedOnRerun(commit), mine ? othersAt(pr, login) : null,
+                        mine ? qualityGate(pr) : null));
             }
         }
         return out;
@@ -845,7 +857,7 @@ public class GitHub {
     /** Reviews, comments and threads on a PR, for {@link #feedback}. */
     private static final String FEEDBACK = "lastCommit: commits(last: 1) { nodes { commit { committedDate } } } "
             + "allReviews: reviews(last: 30) { nodes { state submittedAt author { __typename login } } } "
-            + "comments(last: 30) { nodes { createdAt author { __typename login } } } "
+            + "comments(last: 30) { nodes { createdAt body author { __typename login } } } "
             + "reviewThreads(last: 100) { nodes { isResolved } } "
             + "reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } } } } ";
 
@@ -901,7 +913,45 @@ public class GitHub {
     static boolean isBot(JsonNode author) {
         String login = author.path("login").asText("");
         return "Bot".equals(author.path("__typename").asText()) || login.isEmpty() || login.endsWith("[bot]")
-                || login.endsWith("-bot");
+                || login.endsWith("-bot") || SERVICE_BOTS.contains(login.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Services that comment as an app without saying so in their login. */
+    static final Set<String> SERVICE_BOTS = Set.of("sonarqubecloud", "sonarcloud", "codecov", "coveralls", "netlify",
+            "vercel");
+
+    private static final java.util.regex.Pattern GATE = java.util.regex.Pattern.compile("Quality Gate (passed|failed)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * SonarQube Cloud's quality gate, from its latest comment ({@link #FEEDBACK}'s nodes): it edits that comment as the
+     * PR changes, so the latest says how the head stands. "passed", "failed", or null when it hasn't commented.
+     */
+    static String qualityGate(JsonNode pr) {
+        String gate = null;
+        for (JsonNode n : pr.path("comments").path("nodes")) {
+            String by = n.path("author").path("login").asText("").toLowerCase(java.util.Locale.ROOT);
+            if (!by.startsWith("sonarqubecloud") && !by.startsWith("sonarcloud")) continue;
+            var m = GATE.matcher(n.path("body").asText(""));
+            if (m.find()) gate = m.group(1).toLowerCase(java.util.Locale.ROOT);
+        }
+        return gate;
+    }
+
+    /** When someone other than you and bots last reviewed or commented ({@link #FEEDBACK}'s nodes); EPOCH for nobody. */
+    static Instant othersAt(JsonNode pr, String login) {
+        Instant at = Instant.EPOCH;
+        List<JsonNode> said = new ArrayList<>();
+        pr.path("allReviews").path("nodes").forEach(said::add);
+        pr.path("comments").path("nodes").forEach(said::add);
+        for (JsonNode n : said) {
+            boolean review = n.has("state");
+            if (review && "PENDING".equals(n.path("state").asText())) continue;
+            if (n.path("author").path("login").asText("").equalsIgnoreCase(login) || isBot(n.path("author"))) continue;
+            Instant when = instant(n.path(review ? "submittedAt" : "createdAt"));
+            if (when != null && when.isAfter(at)) at = when;
+        }
+        return at;
     }
 
     private static final String ACTIVITY = """
@@ -914,8 +964,8 @@ public class GitHub {
                     nodes {
                       __typename
                       ... on PullRequestCommit { url commit { oid messageHeadline committedDate author { name user { login } } } }
-                      ... on PullRequestReview { url state submittedAt body author { login } comments { totalCount } }
-                      ... on IssueComment { url createdAt body author { login } }
+                      ... on PullRequestReview { url state submittedAt body author { __typename login } comments { totalCount } }
+                      ... on IssueComment { url createdAt body author { __typename login } }
                       ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Team { name } } }
                       ... on HeadRefForcePushedEvent { createdAt actor { login } }
                       ... on ReadyForReviewEvent { createdAt actor { login } }
@@ -1103,6 +1153,8 @@ public class GitHub {
                 default -> null;
             };
             if (e == null || e.at() == null) continue;
+            // A bot's comment or review (SonarQube Cloud's quality gate, a coverage report) isn't news for you.
+            if ((e.kind().equals("comment") || e.kind().equals("review")) && isBot(n.path("author"))) continue;
             all.add(e);
             boolean yours = e.who().equalsIgnoreCase(login) && (e.kind().equals("review") || e.kind().equals("comment"));
             if (yours && (since == null || e.at().isAfter(since))) {

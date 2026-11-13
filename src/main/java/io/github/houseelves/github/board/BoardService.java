@@ -339,8 +339,9 @@ public class BoardService {
         int number = Integer.parseInt(itemKey.substring(itemKey.indexOf('#') + 1));
         Item fresh = github.item(token, repo, number);
         if (fresh != null && fresh.isPr()) {
-            GitHub.PrDetails d = github.prDetails(token, List.of(itemKey)).get(itemKey);
-            if (d != null) fresh = fresh.withDetails(d.mergeState(), d.awaitingApproval(), d.passedOnRerun());
+            GitHub.PrDetails d = github.prDetails(token, List.of(itemKey), login).get(itemKey);
+            if (d != null) fresh = fresh.withDetails(d.mergeState(), d.awaitingApproval(), d.passedOnRerun())
+                    .withQualityGate(d.qualityGate());
         }
         Item item = fresh;
         load();
@@ -548,8 +549,8 @@ public class BoardService {
     }
 
     /**
-     * Others' PRs you reviewed that moved on since: new commits (the head isn't the commit you reviewed), or other
-     * activity (updated more than a couple of minutes after your review).
+     * Others' PRs you reviewed that moved on since: new commits (the head isn't the commit you reviewed), or someone
+     * (not a bot) reviewing or commenting more than a couple of minutes after your review.
      */
     @SafeVarargs
     static Map<String, String> sinceYourReview(String login, Map<String, GitHub.PrDetails> details, List<Item>... lists) {
@@ -560,7 +561,10 @@ public class BoardService {
                 if (d == null || d.myReviewAt() == null || i.author().equalsIgnoreCase(login)) continue;
                 if (d.myReviewedSha() != null && i.headSha() != null && !d.myReviewedSha().equals(i.headSha())) {
                     out.put(i.key(), "New commits since your review");
-                } else if (i.updatedAt() != null && i.updatedAt().isAfter(d.myReviewAt().plus(Duration.ofMinutes(2)))) {
+                } else if (d.othersAt() != null ? d.othersAt().isAfter(d.myReviewAt().plus(Duration.ofMinutes(2)))
+                        : i.updatedAt() != null && i.updatedAt().isAfter(d.myReviewAt().plus(Duration.ofMinutes(2)))) {
+                    // Someone said something (bots don't count: a quality gate passing isn't news), or, when that
+                    // wasn't read, anything changed.
                     out.put(i.key(), "Updated since your review");
                 }
             }
@@ -585,7 +589,8 @@ public class BoardService {
     private static List<Item> enrich(List<Item> items, Map<String, GitHub.PrDetails> details) {
         return items.stream().map(i -> {
             GitHub.PrDetails d = details.get(i.key());
-            return d == null ? i : i.withDetails(d.mergeState(), d.awaitingApproval(), d.passedOnRerun());
+            return d == null ? i : i.withDetails(d.mergeState(), d.awaitingApproval(), d.passedOnRerun())
+                    .withQualityGate(d.qualityGate());
         }).toList();
     }
 

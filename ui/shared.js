@@ -106,6 +106,9 @@ export function itemChips(item, { ciMenu = false, conflictMenu = false, approval
         if (item.ci === 'SUCCESS' && item.mergeState !== 'BLOCKED') {
             chips.push(html`<span class="chip ok" title="Every check on the latest commit passed">CI passed</span>`);
         }
+        // SonarQube Cloud's quality gate, from its comment on the PR.
+        if (item.qualityGate === 'passed') chips.push(html`<span class="chip ok" title="SonarQube Cloud's quality gate passed">SonarQube passed</span>`);
+        if (item.qualityGate === 'failed') chips.push(html`<span class="chip warn" title="SonarQube Cloud's quality gate failed: see its comment on the PR">SonarQube failed</span>`);
         if (item.reviewDecision === 'APPROVED') chips.push(html`<span class="chip ok">Approved</span>`);
         // Green and ready, apart from an approval: say so, as that's what decides between Merge and Merge without approval.
         if (approval && mergeableAnyway(item) && item.reviewDecision !== 'CHANGES_REQUESTED') {
