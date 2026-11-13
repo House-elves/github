@@ -62,6 +62,9 @@ class GhThread extends LitElement {
     };
 
     static styles = [shared, markdownStyles, css`
+        .error-box { display: grid; gap: 6px; }
+        .error-box .error { margin: 0; }
+        .acts-l { display: flex; flex-wrap: wrap; gap: 6px; }
         .steps-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         :host([compact]) { display: block; }
         .compact { display: grid; gap: 14px; min-width: 0; }
@@ -574,7 +577,7 @@ class GhThread extends LitElement {
                     <gh-description .itemKey=${this.itemKey} .url=${url}></gh-description>
                     ${this._recap && t ? this._renderRecap(t, kind, item) : ''}
                     ${kind === 'PR' && url ? this._renderFiles(url) : ''}
-                    ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
+                    ${this._renderError()}
                     ${this._posted ? html`<p class="posted"><span class="chip ok">Posted</span>
                         <a href=${this._posted} target="_blank" rel="noopener">${this._posted}</a></p>` : ''}
                     ${!this._loaded ? this._renderSkeleton() : ''}
@@ -588,6 +591,25 @@ class GhThread extends LitElement {
                 ${this._loaded ? this._renderAside(t, kind, url, item) : ''}
             </div>
         `;
+    }
+
+    /**
+     * The error, with what it says to do as buttons: a review drafted before the PR changed (its inline comments
+     * no longer in the diff) can be looked at again, which drafts a new one in its place, or discarded.
+     */
+    _renderError() {
+        if (!this._error) return '';
+        const draft = this._thread?.draft;
+        const stale = draft && this._error.includes('Ask the agent to look at the PR again');
+        return html`<div class="error-box">
+            <p class="error" role="alert">${this._error}</p>
+            ${stale ? html`<div class="acts-l">
+                <button class="sm" ?disabled=${this._busy} @click=${() => this._start('review')}
+                    title="The agent reviews the PR as it is now; its new draft replaces this one">${this._spin('review')}Look again</button>
+                <button class="sm quiet danger" ?disabled=${this._busy}
+                    @click=${() => this._do(() => act('discard-draft', { draftId: draft.id }), 'discard')}>${this._spin('discard')}Discard</button>
+            </div>` : ''}
+        </div>`;
     }
 
     /** Next: the next item in Your move, so you can go on without going back to the board. */
@@ -614,7 +636,7 @@ class GhThread extends LitElement {
         return html`
             <div class="compact">
                 <gh-description .itemKey=${this.itemKey} .url=${url}></gh-description>
-                ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
+                ${this._renderError()}
                 ${this._posted ? html`<p class="posted"><span class="chip ok">Posted</span>
                     <a href=${this._posted} target="_blank" rel="noopener">${this._posted}</a></p>` : ''}
                 ${!this._loaded ? this._renderSkeleton() : ''}

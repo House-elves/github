@@ -6,7 +6,8 @@ import { elf } from '/elf-kit/1/kit.js';
 
 /** A readable message from a failed call. */
 export function errorMessage(e) {
-    return e?.message || String(e);
+    // The desk's wrapping ("Method [desk#elfAction] failed: ") says nothing to you.
+    return (e?.message || String(e)).replace(/^Method \[[^\]]*\] failed:\s*/, '');
 }
 
 /** You clicked Cancel in the desk's bar: nothing was sent, and there's nothing to say about it. */

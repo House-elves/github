@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.15.0
+
+- A review drafted before the PR changed (its inline comments no longer in the diff) now has **Look again** and
+  **Discard** under the error. Look again has the agent review the PR as it is now; its new draft replaces the old one.
+- Errors no longer start with "Method [desk#elfAction] failed".
+
 ## 1.14.0
 
 - Before Investigate or Fix on an issue, the thread lists other open PRs that mention it (title, author, draft,
