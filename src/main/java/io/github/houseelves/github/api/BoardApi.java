@@ -96,7 +96,7 @@ public class BoardApi {
                 accounts.actAs(l);
                 Board b = boards.board(l, refresh || !boards.cached(l) ? token() : null, refresh)
                         .with(threads.summaries(), merges.recent(), true)
-                        .withFlows(java.time.Instant.now()).later(later.keys());
+                        .withFlows(java.time.Instant.now()).capped(settings.maxOpenPrs()).later(later.keys());
                 parts.add(new BoardMerge.Part(l, b));
             }
         } finally {
@@ -481,7 +481,7 @@ public class BoardApi {
      *                      searches them, so it's who the items are done as that tells them apart)
      */
     public record SettingsView(String login, List<ScopeRow> scope, int refreshMinutes, List<String> alwaysInvolved,
-            List<Accounts.Named> accounts, Map<String, List<String>> maintainedBy) {
+            List<Accounts.Named> accounts, Map<String, List<String>> maintainedBy, int maxOpenPrs) {
     }
 
     /** What state/settings-view.json has. */
@@ -497,7 +497,7 @@ public class BoardApi {
                             .startsWith(prefix))).toList());
         }
         return new SettingsView(accounts.primary(), rows, settings.refreshMinutes(), settings.alwaysInvolved(), accounts.all(),
-                maintainedBy);
+                maintainedBy, settings.maxOpenPrs());
     }
 
     /** The accounts that have items in an owner's repos (a name without /) or in one repo. */
@@ -599,6 +599,12 @@ public class BoardApi {
 
     public SettingsView remove(long id) {
         scopes.remove(id);
+        return changed();
+    }
+
+    /** The most open PRs of yours per repo before Fix waits; 0: no limit. */
+    public SettingsView setMaxOpenPrs(int max) {
+        settings.setMaxOpenPrs(max);
         return changed();
     }
 

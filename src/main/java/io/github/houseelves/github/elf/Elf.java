@@ -69,6 +69,7 @@ public class Elf {
         this.agents = new Agents(home.agents());
         this.boards = new BoardService(github, scopes, settings, live, ignores, home.board());
         this.threads = new ThreadService(github, store, agents, live);
+        this.threads.maxOpenPrs(settings::maxOpenPrs);
         this.poster = new Poster(writer, github, store, live);
         this.merges = new MergeService(home.state(), github, writer, store, live);
         this.ci = new CiService(github, writer, threads, store, live);

@@ -55,6 +55,13 @@ public class ThreadService {
         this(github, store, agents, live, Clock.systemUTC());
     }
 
+    /** The most open PRs of yours per repo before Fix waits (0: no limit); the board's setting. */
+    private java.util.function.IntSupplier maxOpenPrs = () -> io.github.houseelves.github.settings.Settings.DEFAULT_MAX_OPEN_PRS;
+
+    public void maxOpenPrs(java.util.function.IntSupplier max) {
+        this.maxOpenPrs = max;
+    }
+
     ThreadService(GitHub github, ThreadStore store, Agents agents, Live live, Clock clock) {
         this.github = github;
         this.store = store;
@@ -193,14 +200,23 @@ public class ThreadService {
         if ((action.equals(Prompts.INVESTIGATE) || action.equals(Prompts.FIX)) && ctx.kind() != Item.Kind.ISSUE) {
             throw new IllegalArgumentException(itemKey + " is a PR; use Review");
         }
+        if (action.equals(Prompts.FIX)) checkCap(token, repo, login);
         List<GitHub.LinkedPr> linked = ctx.kind() == Item.Kind.ISSUE ? openPrsFor(token, itemKey) : List.of();
-        String material = ctx.kind() == Item.Kind.ISSUE ? join(extra, linkedSection(linked)) : extra;
+        GitHub.Claims claims = action.equals(Prompts.INVESTIGATE) || action.equals(Prompts.FIX) ? claimsFor(token, repo, number) : null;
+        List<String> others = claims == null ? List.of() : claims.assignees().stream()
+                .filter(a -> login == null || !a.equalsIgnoreCase(login)).toList();
+        String material = ctx.kind() == Item.Kind.ISSUE
+                ? join(extra, join(linkedSection(linked), claimsSection(others, claims == null ? List.of() : claims.labels())))
+                : extra;
         // The linked PRs' titles and authors are anyone's words: the safety check reads them too.
         extraUntrusted = join(blankToNull(extraUntrusted), linkedText(linked));
 
         DeskThread t = upsert(ctx);
         requireIdle(t);
         store.addTurn(t.id, Turn.YOU, action, Prompts.label(action, question));
+        // Before a plan or a fix, show you what the agent is told: other PRs on it, and who else has claimed it.
+        String overlap = (action.equals(Prompts.INVESTIGATE) || action.equals(Prompts.FIX)) ? overlapNote(linked, others) : null;
+        if (overlap != null) store.addTurn(t.id, Turn.SYSTEM, null, overlap);
         boolean fresh = t.claudeSession == null;
         String prompt = fresh
                 ? Prompts.start(action, ctx, login, question, material)
@@ -499,6 +515,13 @@ public class ThreadService {
     }
 
     /**
+     * Ends every PR description the agent drafts (you can edit it before opening). Projects like Quarkus accept
+     * AI-assisted PRs when a person understands them and takes responsibility (their AI_POLICY.md); saying so
+     * up front is what lets a reviewer trust that.
+     */
+    static final String DISCLOSURE = "_Written with an AI coding agent. I approved the plan and I review this change._";
+
+    /**
      * The agent committed in an issue's worktree: offer its commit (the runner makes it one, on the default branch)
      * as a new PR, with the title and body it drafted. Your fork and the branch are worked out when you preview.
      */
@@ -520,6 +543,7 @@ public class ThreadService {
         String fixes = "Fixes #" + t.number();
         String body = texts && drafted.body() != null && !drafted.body().isBlank() ? drafted.body().strip() : "";
         if (!body.contains(fixes)) body = body.isEmpty() ? fixes : body + "\n\n" + fixes;
+        if (!body.contains(DISCLOSURE)) body = body + "\n\n" + DISCLOSURE;
         PrOut pr = new PrOut(t.repo(), git.path("base").asText(), null, null, title, body, git.path("from").asText(),
                 git.path("to").asText(), List.of(commit), git.path("diffstat").asText(""), git.path("patch").asText(null),
                 git.path("patchCut").asBoolean());
@@ -704,6 +728,78 @@ public class ThreadService {
         }
     }
 
+    /**
+     * The cap on your open PRs per repo: Fix waits while you have that many open there. Busy projects ask for it
+     * (review load from AI-written PRs); a reviewer facing ten PRs from one person at once reviews none of them well.
+     */
+    private void checkCap(String token, String repo, String login) {
+        int max = maxOpenPrs.getAsInt();
+        if (max <= 0 || login == null) return;
+        GitHub.OpenPrs prs;
+        try {
+            prs = github.openPrs(token, repo, login);
+        } catch (Exception e) {
+            LOG.debugf("Couldn't count the open PRs in %s: %s", repo, e.getMessage());
+            return;
+        }
+        // Your own projects (you can write to them): the cap is for contributing to others'.
+        if (prs == null || prs.canWrite()) return;
+        int open = prs.count();
+        if (open >= max) {
+            throw new IllegalStateException("You have " + open + " open PRs in " + repo + " (your cap is " + max
+                    + "). This fix waits until one is merged or closed; the cap is in the board's settings.");
+        }
+    }
+
+    private GitHub.Claims claimsFor(String token, String repo, int number) {
+        try {
+            return github.claims(token, repo, number);
+        } catch (Exception e) {
+            LOG.debugf("Couldn't read who %s#%d is assigned to: %s", repo, number, e.getMessage());
+            return null;
+        }
+    }
+
+    /** The prompt's section on who else is assigned and the issue's labels (a label may close it to outsiders). */
+    static String claimsSection(List<String> others, List<String> labels) {
+        if (others.isEmpty() && labels.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder("## Claims on this issue\n\n");
+        if (!others.isEmpty()) {
+            sb.append("Also assigned to: ").append(String.join(", ", others.stream().map(a -> "@" + Prompts.quote(a)).toList()))
+                    .append('\n');
+        }
+        if (!labels.isEmpty()) {
+            sb.append("Labels: ").append(String.join(", ", labels.stream().map(Prompts::quote).toList())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** What the thread shows you before a plan or a fix: other open PRs on the issue and other assignees. Null: none. */
+    static String overlapNote(List<GitHub.LinkedPr> prs, List<String> others) {
+        if (prs.isEmpty() && others.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder("Check before going on:\n");
+        for (GitHub.LinkedPr pr : prs) sb.append("\n- ").append(prLine(pr));
+        if (!others.isEmpty()) {
+            sb.append("\n- Also assigned to ").append(String.join(", ", others.stream().map(a -> "@" + a).toList()));
+        }
+        return sb.toString();
+    }
+
+    /** One PR on one line: link, title, author, draft and labels, so the link alone isn't all you get. */
+    static String prLine(GitHub.LinkedPr pr) {
+        return "[" + pr.key() + "](" + pr.url() + ") " + code(pr.title()) + " (by @" + pr.author()
+                + (pr.draft() ? ", draft" : "") + (pr.fixes() ? ", says it fixes this" : ", mentions this") + ")"
+                + (pr.labels().isEmpty() ? "" : " " + code(String.join(", ", pr.labels())));
+    }
+
+    /**
+     * Someone else's words (a PR's title or labels) in a Markdown turn, as a code span: a title can't add a link, an
+     * image or markup to the thread. Backticks and line breaks in it become a quote and a space.
+     */
+    static String code(String s) {
+        return "`" + (s == null ? "" : s.replace('`', '\'').replace('\n', ' ').replace('\r', ' ')) + "`";
+    }
+
     /** The prompt's section on them: their titles and authors are quoted data, like the item's own text. */
     static String linkedSection(List<GitHub.LinkedPr> prs) {
         if (prs.isEmpty()) return null;
@@ -712,7 +808,9 @@ public class ThreadService {
         for (GitHub.LinkedPr pr : prs) {
             sb.append("- ").append(pr.key()).append(pr.fixes() ? " (says it fixes this issue)" : " (mentions this issue)")
                     .append(pr.draft() ? ", draft" : "").append(", by @").append(Prompts.quote(pr.author())).append(": ")
-                    .append(Prompts.quote(pr.title())).append(" ").append(pr.url()).append('\n');
+                    .append(Prompts.quote(pr.title()))
+                    .append(pr.labels().isEmpty() ? "" : " [" + Prompts.quote(String.join(", ", pr.labels())) + "]")
+                    .append(" ").append(pr.url()).append('\n');
         }
         return sb.append("</prs>\n").toString();
     }

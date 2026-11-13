@@ -3,6 +3,21 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.14.0
+
+- Before Investigate or Fix on an issue, the thread lists other open PRs that mention it (title, author, draft,
+  labels) and anyone else assigned, and the agent sees them too. The plan says where the root cause is, and
+  recommends not going ahead when another PR covers it, someone claimed it, it's closed to outside contributors, or
+  it's already fixed or not a bug.
+- Fix reads the repo's CLAUDE.md, AGENTS.md, CONTRIBUTING.md and AI_POLICY.md, checks the default branch doesn't
+  already fix it, fixes the root cause with a small change and one focused test that fails without it.
+- PR descriptions end with a note that the change was written with an AI coding agent, and that you approved the
+  plan and review it (you can still edit it before opening).
+- Fix waits while you have 3 open PRs in a repo you don't maintain (change it, or turn it off, in Settings); the
+  board says so on the issue.
+- Labels show next to items on the board, and linked PRs show their title; the agent gives titles with every link and
+  avoids wide tables. Reviews of others' PRs leave out summaries and nits.
+
 ## 1.13.0
 
 - **Don't backport** on a merged PR takes it off the Merged list for good, when it doesn't need a backport. Nothing changes

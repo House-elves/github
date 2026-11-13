@@ -100,6 +100,40 @@ public record Board(
                 FlowClassifier.flows(this, now), feedback, rebasing);
     }
 
+    /**
+     * Issues whose next step is Fix, in a repo where you already have {@code max} open PRs or more: they say they wait
+     * on your cap (Fix refuses until one is merged or closed). {@code max} 0: no cap. Repos you can write to are left
+     * out: the cap is for contributing to others' projects. The count is of your PRs on the board, so at least that
+     * many: Fix counts them all on GitHub, and may still refuse when the board shows fewer.
+     */
+    public Board capped(int max) {
+        if (flows == null || max <= 0 || login == null) return this;
+        Map<String, Integer> open = new java.util.HashMap<>();
+        java.util.Set<String> counted = new java.util.HashSet<>();
+        for (Lane lane : lanes) {
+            for (Item i : lane.items()) {
+                if (i.isPr() && login.equalsIgnoreCase(i.author()) && counted.add(i.key())) {
+                    open.merge(i.repo().toLowerCase(java.util.Locale.ROOT), 1, Integer::sum);
+                }
+            }
+        }
+        Map<String, Flow> out = new java.util.LinkedHashMap<>(flows);
+        for (Lane lane : lanes) {
+            for (Item i : lane.items()) {
+                Flow f = out.get(i.key());
+                int n = open.getOrDefault(i.repo().toLowerCase(java.util.Locale.ROOT), 0);
+                boolean fixNext = f != null && (f.next() != null && "fix".equals(f.next().id())
+                        || f.more() != null && f.more().stream().anyMatch(m -> "fix".equals(m.id())));
+                if (!i.isPr() && fixNext && n >= max && !Boolean.TRUE.equals(i.canWrite())) {
+                    out.put(i.key(), f.with(f.waiting(), f.since(), "Waits on your cap: at least " + n + " open PRs in " + i.repo()
+                            + " (at most " + max + ")", f.next(), f.more()));
+                }
+            }
+        }
+        return new Board(login, fetchedAt, refreshMinutes, scopeEmpty, truncated, lanes, hidden, ignored, threads,
+                runnerConnected, refreshing, merges, returned, sinceReview, linkedPrs, reviewedAt, out, feedback, rebasing);
+    }
+
     /** Your move, but put aside for later: under Later instead (its steps stay, and taking one brings it back). */
     public Board later(java.util.Set<String> keys) {
         if (flows == null || keys.isEmpty()) return this;

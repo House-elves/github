@@ -19,6 +19,12 @@ public class Settings {
     static final String REFRESH_MINUTES = "board.refresh-minutes";
     static final int DEFAULT_REFRESH_MINUTES = 5;
     static final String ALWAYS_INVOLVED = "board.always-involved";
+    static final String MAX_OPEN_PRS = "board.max-open-prs";
+    /**
+     * Busy projects drown in AI-written PRs (Quarkus, Nov 2026): a cap on each contributor's open PRs is one of their
+     * answers, and a reviewer facing ten at once reviews none of them well.
+     */
+    public static final int DEFAULT_MAX_OPEN_PRS = 3;
 
     private final Path file;
     private Map<String, String> values;
@@ -68,5 +74,21 @@ public class Settings {
             throw new IllegalArgumentException("Refresh must be between 1 and 60 minutes");
         }
         put(REFRESH_MINUTES, Integer.toString(minutes));
+    }
+
+    /** The most open PRs of yours per repo before Fix waits; 0: no limit. */
+    public int maxOpenPrs() {
+        String s = get(MAX_OPEN_PRS);
+        if (s == null) return DEFAULT_MAX_OPEN_PRS;
+        try {
+            return Math.max(0, Integer.parseInt(s));
+        } catch (NumberFormatException e) {
+            return DEFAULT_MAX_OPEN_PRS;
+        }
+    }
+
+    public void setMaxOpenPrs(int max) {
+        if (max < 0 || max > 50) throw new IllegalArgumentException("The cap must be between 0 (no limit) and 50");
+        put(MAX_OPEN_PRS, Integer.toString(max));
     }
 }

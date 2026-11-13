@@ -70,5 +70,16 @@ class PromptsTest {
         assertTrue(!prompt.contains("if the author should be told"), prompt);
         assertTrue(Prompts.start(Prompts.CI_WHY, own, "phillip-kruger", null).contains("if the author should be told"));
     }
-}
 
+    @Test
+    void theFixPromptReadsTheGuidesFixesTheRootCauseAndDoesNotHideTheAi() {
+        String fix = Prompts.task(Prompts.FIX, Contexts.issue("quarkusio/quarkus", 1, "NONE"), null);
+        assertTrue(fix.contains("AI_POLICY.md"));
+        assertTrue(fix.contains("root cause"));
+        assertTrue(fix.contains("fails without the fix"));
+        assertTrue(fix.contains("written with an AI coding agent"));
+        assertTrue(!fix.contains("No AI or agent attribution"));
+        String investigate = Prompts.task(Prompts.INVESTIGATE, Contexts.issue("quarkusio/quarkus", 1, "NONE"), null);
+        assertTrue(investigate.contains("Recommend not going ahead"));
+    }
+}

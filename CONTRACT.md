@@ -68,7 +68,7 @@ Reads (`ask: false`): `item`, `about`, `thread`, `pr-diff`, `pr-activity`, `pr-r
 
 Local changes (`ask: false`): `update-draft`, `discard-draft`, `ignore`, `unignore`, `cancel-merge`,
 `watch`, `watch-all`, `exclude`, `remove`, `add-always-involved`, `remove-always-involved`,
-`set-refresh-minutes`, `seen` (the thread page was looked at), and the agent starts below.
+`set-refresh-minutes`, `set-max-open-prs`, `seen` (the thread page was looked at), and the agent starts below.
 
 Agent starts (`ask: false`; they write nothing to GitHub): `start` (with `action` and `question`), `fix-review`,
 `reply`, `ci-why`, `ci-why-again`, `ci-fix`, `address-review`, `resolve-conflicts`, `cancel` (stops the item's agent:
@@ -110,7 +110,7 @@ desk's confirm bar for these actions.
 ## Settings (elf.yaml `settings`)
 
 `GITHUB_ACCOUNT` (login, needed). The board's own settings stay where they are in the desk's UI (the board's
-Settings panel: scope, always involved, refresh minutes) and live in `state/settings.json` and
+Settings panel: scope, always involved, refresh minutes, the cap on your open PRs per repo before Fix waits) and live in `state/settings.json` and
 `state/scope.json`, not in the config file.
 
 ## mvnpm

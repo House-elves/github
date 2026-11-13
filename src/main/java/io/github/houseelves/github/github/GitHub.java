@@ -37,13 +37,14 @@ public class GitHub {
     static final int MAX_PAGES = 10;
 
     /** The fields {@link #toItem} reads, for search results and single items alike. */
-    private static final String ITEM_FIELDS = """
+    static final String ITEM_FIELDS = """
             __typename
             ... on Issue {
               number title url createdAt updatedAt state
-              repository { nameWithOwner }
+              repository { nameWithOwner viewerPermission }
               author { login }
               assignees(first: 10) { nodes { login } }
+              labels(first: 5) { nodes { name } }
               comments { totalCount }
             }
             ... on PullRequest {
@@ -52,6 +53,7 @@ public class GitHub {
               commitCount: commits { totalCount }
               author { login }
               assignees(first: 10) { nodes { login } }
+              labels(first: 5) { nodes { name } }
               comments { totalCount }
               commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 1) { checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
               latestOpinionatedReviews(first: 20, writersOnly: true) { nodes { state } }
@@ -605,7 +607,8 @@ public class GitHub {
                 null, // mergeStateStatus: too heavy for search, filled in by prDetails()
                 pr ? Item.isApproved(textOrNull(n.path("reviewDecision")), writerReviews(n)) : null,
                 canWrite(n.path("repository").path("viewerPermission")),
-                pr && n.path("commitCount").path("totalCount").isInt() ? n.path("commitCount").path("totalCount").asInt() : null);
+                pr && n.path("commitCount").path("totalCount").isInt() ? n.path("commitCount").path("totalCount").asInt() : null,
+                labels(n));
     }
 
     /**
@@ -682,7 +685,75 @@ public class GitHub {
      * @param fixes the PR closes the issue when merged ("Fixes #123", or linked in the sidebar); false: it only
      *              mentions it
      */
-    public record LinkedPr(String key, String title, String url, String author, boolean draft, boolean fixes) {
+    public record LinkedPr(String key, String title, String url, String author, boolean draft, boolean fixes,
+            List<String> labels) {
+
+        public LinkedPr {
+            labels = labels == null ? List.of() : List.copyOf(labels);
+        }
+
+        public LinkedPr(String key, String title, String url, String author, boolean draft, boolean fixes) {
+            this(key, title, url, author, draft, fixes, List.of());
+        }
+    }
+
+    /** The names of an item's labels ({@code labels { nodes { name } }}), empty when it has none. */
+    static List<String> labels(JsonNode n) {
+        List<String> out = new ArrayList<>();
+        n.path("labels").path("nodes").forEach(l -> {
+            if (l.hasNonNull("name")) out.add(l.path("name").asText());
+        });
+        return List.copyOf(out);
+    }
+
+    /**
+     * Who an issue is assigned to and its labels, for the overlap check before a plan or a fix: someone else may
+     * have claimed it, and a label may say it's not open to outside contribution.
+     */
+    public record Claims(List<String> assignees, List<String> labels) {
+    }
+
+    private static final String CLAIMS = """
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                issue(number: $number) { assignees(first: 10) { nodes { login } } labels(first: 20) { nodes { name } } }
+              }
+            }
+            """;
+
+    public Claims claims(String token, String repo, int number) {
+        String[] parts = repo.split("/", 2);
+        JsonNode issue = call(token, CLAIMS, Map.of("owner", parts[0], "name", parts[1], "number", number))
+                .path("repository").path("issue");
+        List<String> assignees = new ArrayList<>();
+        issue.path("assignees").path("nodes").forEach(a -> assignees.add(a.path("login").asText()));
+        return new Claims(List.copyOf(assignees), labels(issue));
+    }
+
+    /**
+     * Your open PRs in a repo, for the cap on them.
+     *
+     * @param count    how many open PRs you have there
+     * @param canWrite you can write to the repo (you maintain it): the cap is for others' projects, so it doesn't apply
+     */
+    public record OpenPrs(int count, boolean canWrite) {
+    }
+
+    private static final String OPEN_PRS = """
+            query($q: String!, $owner: String!, $name: String!) {
+              search(query: $q, type: ISSUE, first: 1) { issueCount }
+              repository(owner: $owner, name: $name) { viewerPermission }
+            }
+            """;
+
+    /** How many open PRs {@code login} has in {@code repo}, and whether you can write to it. */
+    public OpenPrs openPrs(String token, String repo, String login) {
+        if (!repo.matches("[A-Za-z0-9-]+/[A-Za-z0-9._-]+") || !login.matches("[A-Za-z0-9-]+")) return new OpenPrs(0, false);
+        String[] parts = repo.split("/", 2);
+        JsonNode data = call(token, OPEN_PRS, Map.of("q", "repo:" + repo + " is:pr is:open author:" + login,
+                "owner", parts[0], "name", parts[1]));
+        return new OpenPrs(data.path("search").path("issueCount").asInt(),
+                Boolean.TRUE.equals(canWrite(data.path("repository").path("viewerPermission"))));
     }
 
     /** Open PRs that fix or mention each issue, by issue key; issues without any are left out. */
@@ -718,7 +789,8 @@ public class GitHub {
         return out;
     }
 
-    private static final String LINKED_PR = "number title url state isDraft author { login } repository { nameWithOwner }";
+    private static final String LINKED_PR = "number title url state isDraft author { login } repository { nameWithOwner } "
+            + "labels(first: 5) { nodes { name } }";
 
     /** Adds an open PR (a cross-reference can also be an issue, or a closed PR: skipped). Fixing wins over mentioning. */
     private static void linked(JsonNode pr, boolean fixes, Map<String, LinkedPr> prs) {
@@ -727,7 +799,7 @@ public class GitHub {
         LinkedPr before = prs.get(key);
         prs.put(key, new LinkedPr(key, pr.path("title").asText(), pr.path("url").asText(),
                 pr.path("author").path("login").asText(""), pr.path("isDraft").asBoolean(),
-                fixes || (before != null && before.fixes())));
+                fixes || (before != null && before.fixes()), labels(pr)));
     }
 
     public Map<String, PrDetails> prDetails(String token, List<String> keys) {
