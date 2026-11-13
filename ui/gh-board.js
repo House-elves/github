@@ -3,7 +3,7 @@
 // that do wait for your click in the desk's bar.
 import { LitElement, html, css, shared, ago, spinner, Ticking, count, elf } from '/elf-kit/1/kit.js';
 import {
-    linkedPrChips, labelChips, rememberLinks, itemChips, ciFailing, hasConflicts, mergeableAnyway, kindIcon, threadHref, rememberItem,
+    linkedPrChips, labelChips, qualityGateChip, rememberLinks, itemChips, ciFailing, hasConflicts, mergeableAnyway, kindIcon, threadHref, rememberItem,
     settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline, usd, COST_HINT,
     accountsOf, loginFor, accountName, manyAccounts, isMine } from './shared.js';
 import { act, board, cancelled, errorMessage, squash, startAgent } from './api.js';
@@ -855,6 +855,7 @@ class GhBoard extends LitElement {
                     <div class="meta">
                         <span>${item.repo} #${item.number}</span>
                         ${labelChips(item)}
+                        ${qualityGateChip(item)}
                         ${this._stepper(f)}
                         <span class="say">${f.say}</span>
                         ${f.since ? html`<span>${ago(f.since)}</span>` : ''}

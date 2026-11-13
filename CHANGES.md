@@ -3,6 +3,10 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.16.2
+
+- The SonarQube chip shows on every PR row of the board, next to its labels.
+
 ## 1.16.1
 
 - The SonarQube chip only trusts SonarQube Cloud's own app, not a person with a look-alike name.
