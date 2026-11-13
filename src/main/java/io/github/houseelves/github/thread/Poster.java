@@ -115,7 +115,7 @@ public class Poster {
     public Preview preview(long draftId, String githubToken, String login) {
         resolvePushTarget(draftId, githubToken);
         checkIssueRepo(draftId, githubToken);
-        checkReviewLines(draftId, githubToken);
+        String moved = checkReviewLines(draftId, githubToken);
         String warning = resolvePrTarget(draftId, githubToken, login);
         Draft d = pendingDraft(draftId);
         DeskThread t = store.thread(d.threadId);
@@ -146,7 +146,7 @@ public class Poster {
                         "https://github.com/" + out.repo() + "/issues", token);
             }
             String target = (d.kind.equals(Draft.REVIEW) ? "Review on " : "Comment on ") + t.itemKey;
-            return new Preview(draftId, target, d.kind, out, null, t.url, token);
+            return new Preview(draftId, target, d.kind, out, null, null, t.url, token, moved);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Unreadable draft", e);
         }
@@ -422,28 +422,47 @@ public class Poster {
 
     /**
      * A review's inline comments must sit on lines of the PR's diff as it is now, or GitHub refuses the whole review
-     * ("Path could not be resolved"). The PR can change after the agent drafted it, a file taken out or lines moved,
-     * so this checks before preview. When the diff can't be read in full, GitHub decides.
+     * ("Path could not be resolved"): the agent may have put one on a line the PR doesn't touch, or the PR changed
+     * since. Those move into the review's text, with their file and line, and the draft says so: the rest posts as is.
+     * When the diff can't be read in full, GitHub decides. Returns what moved, for the preview, or null.
      */
-    private void checkReviewLines(long draftId, String githubToken) {
+    private String checkReviewLines(long draftId, String githubToken) {
         Draft d = pendingDraft(draftId);
-        if (!d.kind.equals(Draft.REVIEW) || githubToken == null) return;
+        if (!d.kind.equals(Draft.REVIEW) || githubToken == null) return null;
         AgentOutput.DraftOut out = read(d.payload);
-        if (out.comments() == null || out.comments().isEmpty()) return;
+        if (out.comments() == null || out.comments().isEmpty()) return null;
         DeskThread t = store.thread(d.threadId);
         GitHub.Diff diff = github.prDiff(githubToken, t.repo(), t.number(), 50_000_000);
-        if (diff == null || diff.cut()) return;
+        if (diff == null || diff.cut()) return null;
         Map<String, Set<Integer>> lines = rightSideLines(diff.text());
-        List<String> gone = new ArrayList<>();
+        List<AgentOutput.InlineComment> keep = new ArrayList<>();
+        List<AgentOutput.InlineComment> gone = new ArrayList<>();
         for (AgentOutput.InlineComment c : out.comments()) {
             Set<Integer> at = lines.get(c.path());
-            if (at == null) gone.add(c.path() + " line " + c.line() + " (the file is no longer in the PR)");
-            else if (!at.contains(c.line())) gone.add(c.path() + " line " + c.line() + " (no longer in the diff)");
+            if (at != null && at.contains(c.line())) keep.add(c);
+            else gone.add(c);
         }
-        if (gone.isEmpty()) return;
-        throw new IllegalStateException("The PR changed since this review was drafted, and GitHub would refuse it: "
-                + (gone.size() == 1 ? "the inline comment on " : "the inline comments on ") + String.join(", ", gone)
-                + ". Ask the agent to look at the PR again, or discard this draft.");
+        if (gone.isEmpty()) return null;
+        d.payload = mapper.valueToTree(movedIntoBody(out, keep, gone)).toString();
+        store.save(d.threadId);
+        live.changed(t.itemKey);
+        return (gone.size() == 1 ? "1 inline comment is" : gone.size() + " inline comments are")
+                + " on lines the PR doesn't change, where GitHub won't take them ("
+                + gone.stream().map(c -> c.path().substring(c.path().lastIndexOf('/') + 1) + ":" + c.line())
+                        .collect(java.util.stream.Collectors.joining(", "))
+                + "), so " + (gone.size() == 1 ? "it's" : "they're") + " in the review's text instead.";
+    }
+
+    /** The review with {@code gone}'s comments at the end of its text, each under its file and line. */
+    static AgentOutput.DraftOut movedIntoBody(AgentOutput.DraftOut out, List<AgentOutput.InlineComment> keep,
+            List<AgentOutput.InlineComment> gone) {
+        StringBuilder body = new StringBuilder(out.body() == null ? "" : out.body().strip());
+        for (AgentOutput.InlineComment c : gone) {
+            if (body.length() > 0) body.append("\n\n");
+            body.append("`").append(c.path()).append("` line ").append(c.line()).append(":\n\n").append(c.body().strip());
+        }
+        return new AgentOutput.DraftOut(out.kind(), out.event(), body.toString(), List.copyOf(keep), out.repo(), out.title(),
+                out.then());
     }
 
     /** For each file of a unified diff, the new-side lines a review comment can go on: added and context lines. */

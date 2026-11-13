@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.17.0
+
+- A review's inline comment on a line the PR doesn't change (GitHub won't take it there) no longer stops the review
+  from posting: it moves into the review's text, under its file and line, and the preview says so. Before, Look again
+  didn't help when the PR hadn't changed: the agent kept its draft, and the same error came back.
+
 ## 1.16.2
 
 - The SonarQube chip shows on every PR row of the board, next to its labels.

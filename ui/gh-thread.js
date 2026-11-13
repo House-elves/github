@@ -1168,7 +1168,7 @@ class GhThread extends LitElement {
                 <div class="draft-head"><b>${p.target}</b>${p.kind === 'review'
                     ? html`<span class="chip">${EVENTS[p.draft.event] ?? 'Comment'}</span>` : ''}</div>
                 <div class="draft-body">
-                    ${p.warning ? html`<p class="error" role="alert">${p.warning}</p>` : ''}
+                    ${p.warning ? html`<p class=${p.kind === 'review' ? 'note' : 'error'} role=${p.kind === 'review' ? 'status' : 'alert'}>${p.warning}</p>` : ''}
                     <p>${what}</p>
                 </div>
                 <div class="draft-acts">${buttons}</div>

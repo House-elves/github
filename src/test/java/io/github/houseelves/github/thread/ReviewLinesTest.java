@@ -59,4 +59,16 @@ class ReviewLinesTest {
         assertNull(lines.get("gone.sh"));
         assertFalse(lines.containsKey("new/B.java"));
     }
+
+    @Test
+    void aCommentOffTheDiffMovesIntoTheText() {
+        var in = new io.github.houseelves.github.agent.AgentOutput.InlineComment("src/A.java", 11, "Fine here.");
+        var off = new io.github.houseelves.github.agent.AgentOutput.InlineComment("src/A.java", 592, "Overflow here?");
+        var out = new io.github.houseelves.github.agent.AgentOutput.DraftOut("review", "COMMENT", "Looks good.",
+                java.util.List.of(in, off), null, null, null);
+        var moved = Poster.movedIntoBody(out, java.util.List.of(in), java.util.List.of(off));
+        assertEquals(java.util.List.of(in), moved.comments());
+        assertEquals("Looks good.\n\n`src/A.java` line 592:\n\nOverflow here?", moved.body());
+        assertEquals("COMMENT", moved.event());
+    }
 }
