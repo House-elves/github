@@ -266,6 +266,18 @@ public class GitHubWriter {
      * close/reopen, assign yourself, merges pinned to a head, CI re-runs and approvals (fork runs and deployment
      * environments), PRs from your fork and syncing that fork.
      */
+    /**
+     * A new PR's head: "you:branch" (your fork) or "owner:branch" where owner is the repo's own (a branch of the repo
+     * itself, which only someone who can push there could have made).
+     */
+    static boolean pullHead(String path, String head, String self) {
+        int colon = head.indexOf(':');
+        if (colon <= 0) return false;
+        String owner = head.substring(0, colon);
+        boolean ok = (self != null && owner.equals(self)) || owner.equalsIgnoreCase(path.split("/")[2]);
+        return ok && BRANCH.matcher(head.substring(colon + 1)).matches();
+    }
+
     static boolean allowedWrite(String method, String path, JsonNode body, String self) {
         return switch (method) {
             case "POST" -> REVIEW.matcher(path).matches() || COMMENT.matcher(path).matches()
@@ -280,14 +292,13 @@ public class GitHubWriter {
                             && body.path("environment_ids").size() <= 3
                             && java.util.stream.StreamSupport.stream(body.path("environment_ids").spliterator(), false)
                                     .allMatch(JsonNode::isIntegralNumber))
-                    // A PR from your own fork's branch: title, body, head, base and draft (true, or false to open it
-                    // ready for review), nothing else. You read the change in the desk before you click.
+                    // A PR from your own fork's branch, or a branch of the repo itself (you can push there): title,
+                    // body, head, base and draft (true, or false to open it ready for review), nothing else. You read the change in the desk before you click.
                     || (PULLS.matcher(path).matches() && body.size() == 5 && body.path("draft").isBoolean()
                             && body.path("title").isTextual()
                             && !body.path("title").asText().isBlank() && body.path("body").isTextual()
                             && BRANCH.matcher(body.path("base").asText()).matches()
-                            && self != null && body.path("head").asText().startsWith(self + ":")
-                            && BRANCH.matcher(body.path("head").asText().substring(self.length() + 1)).matches())
+                            && pullHead(path, body.path("head").asText(), self))
                     // Bring your own fork's branch up to date with its upstream (so a push sends only the new commit).
                     || (MERGE_UPSTREAM.matcher(path).matches() && self != null
                             && path.split("/")[2].equalsIgnoreCase(self) && body.size() == 1

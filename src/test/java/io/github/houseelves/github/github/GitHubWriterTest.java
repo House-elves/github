@@ -80,6 +80,7 @@ class GitHubWriterTest {
         // Someone else as assignee, a PR from someone else's fork, an unpinned merge, syncing someone else's fork.
         assertThrows(GitHubWriter.WriteFailed.class, () -> w.assign("a/b", 1, "someone-else"));
         assertThrows(GitHubWriter.WriteFailed.class, () -> w.createPull("a/b", "t", "someone-else:fix", "main", "b", true));
+        assertThrows(GitHubWriter.WriteFailed.class, () -> w.createPull("a/b", "t", "fix", "main", "b", true));
         assertThrows(GitHubWriter.WriteFailed.class, () -> w.merge("a/b", 1, "merge", "not-a-sha"));
         assertThrows(GitHubWriter.WriteFailed.class, () -> w.merge("a/b", 1, "octopus", "c".repeat(40)));
         assertThrows(GitHubWriter.WriteFailed.class, () -> w.syncFork("someone-else/b", "main"));
@@ -89,6 +90,7 @@ class GitHubWriterTest {
 
         w.assign("a/b", 1, "phillip-kruger");
         w.createPull("a/b", "t", "phillip-kruger:fix-1-aaaaaaa", "main", "b", true);
+        w.createPull("a/b", "t", "a:fix-1-aaaaaaa", "main", "b", true); // a branch of the repo itself
         w.merge("a/b", 1, "squash", "c".repeat(40));
         w.syncFork("phillip-kruger/b", "main");
         w.rerunFailedJobs("a/b", 5);
@@ -96,7 +98,7 @@ class GitHubWriterTest {
         w.approveDeployment("a/b", 7, List.of(9L));
         w.reopen("a/b", 1);
         w.requestReviewers("a/b", 1, List.of("brunobat"));
-        assertEquals(9, sent.size());
+        assertEquals(10, sent.size());
 
         // Reviewers: people, not yourself, at most 10.
         assertFalse(GitHubWriter.allowedWrite("POST", "/repos/a/b/pulls/1/requested_reviewers",

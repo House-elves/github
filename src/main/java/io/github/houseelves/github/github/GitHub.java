@@ -240,6 +240,17 @@ public class GitHub {
         return r.path("isFork").asBoolean() && parent.equalsIgnoreCase(r.path("parent").path("nameWithOwner").asText());
     }
 
+    /** You can push to {@code repo} yourself (write, maintain or admin), so a PR's branch can go there. */
+    public boolean canPush(String token, String repo) {
+        String[] parts = repo.split("/", 2);
+        Map<String, Object> vars = new HashMap<>();
+        vars.put("owner", parts[0]);
+        vars.put("name", parts[1]);
+        return Boolean.TRUE.equals(canWrite(call(token, """
+                query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { viewerPermission } }""",
+                vars).path("repository").path("viewerPermission")));
+    }
+
     /** The repo exists and is public (the desk only writes to public repos). */
     public boolean isPublic(String token, String repo) {
         String[] parts = repo.split("/", 2);

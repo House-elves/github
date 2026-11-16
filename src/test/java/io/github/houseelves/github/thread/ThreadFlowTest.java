@@ -376,6 +376,40 @@ class ThreadFlowTest {
     }
 
     @Test
+    void withNoForkAMaintainersPrBranchGoesOnTheRepoItself() throws Exception {
+        String issue = "quarkusio/quarkus#32850";
+        when(github.context(any(), eq("quarkusio/quarkus"), eq(32850)))
+                .thenReturn(Contexts.issue("quarkusio/quarkus", 32850, "MEMBER"));
+        threads.start(issue, Prompts.FIX, null, "phillip-kruger", "gho_t");
+        String fix = "a".repeat(40), base = "b".repeat(40);
+        threads.jobDone(threads.view(issue).job().id(), "s", output("Fixed.", """
+                {"kind": "pr", "title": "Fix it", "body": "Fixes it."}
+                """), null, mapper.readTree("""
+                {"from": "%s", "to": "%s", "base": "main", "diffstat": " 1 file changed",
+                 "commits": [{"sha": "%s", "subject": "Fix it"}]}
+                """.formatted(base, fix, fix)));
+        long draftId = threads.view(issue).draft().id();
+        when(github.isPublic("gho_t", "quarkusio/quarkus")).thenReturn(true);
+        when(github.isForkOf("gho_t", "phillip-kruger/quarkus", "quarkusio/quarkus")).thenReturn(false);
+        when(github.canPush("gho_t", "quarkusio/quarkus")).thenReturn(true);
+
+        Poster.Preview p = poster.preview(draftId, "gho_t", "phillip-kruger");
+        assertEquals("New PR on quarkusio/quarkus from a new branch fix-32850-aaaaaaa on the repo itself (you have no fork)",
+                p.target());
+
+        // No fork to sync: the runner pushes the new branch to the repo, and the PR opens from it.
+        Poster.Result r = poster.post(draftId, p.confirm(), "phillip-kruger");
+        verify(writes, never()).syncFork(anyString(), anyString());
+        assertEquals(new Poster.Push("quarkusio/quarkus", 32850, "quarkusio/quarkus", "fix-32850-aaaaaaa", base, fix,
+                false, null), r.push());
+        when(writes.createPull(eq("quarkusio/quarkus"), eq("Fix it"), eq("quarkusio:fix-32850-aaaaaaa"), eq("main"),
+                anyString(), eq(true)))
+                .thenReturn(mapper.readTree("{\"html_url\": \"https://github.com/quarkusio/quarkus/pull/57301\"}"));
+        assertEquals("https://github.com/quarkusio/quarkus/pull/57301",
+                again().poster.postDone(draftId, 200, null, "phillip-kruger").url());
+    }
+
+    @Test
     void aPushTheRunnerRefusedIsSaidAndAGoneWorktreeDiscardsTheDraft() throws Exception {
         threads.start(KEY, Prompts.REVIEW, null, "phillip-kruger", "gho_t");
         String head = "a".repeat(40), fixed = "b".repeat(40);

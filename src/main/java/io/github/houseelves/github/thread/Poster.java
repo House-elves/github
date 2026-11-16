@@ -137,7 +137,10 @@ public class Poster {
             }
             if (d.kind.equals(Draft.PR)) {
                 PrOut pr = mapper.readValue(d.payload, PrOut.class);
-                return new Preview(draftId, "New PR on " + pr.repo() + " from " + pr.headRepo() + ":" + pr.headRef(), d.kind,
+                String from = pr.headRepo().equalsIgnoreCase(pr.repo())
+                        ? " from a new branch " + pr.headRef() + " on the repo itself (you have no fork)"
+                        : " from " + pr.headRepo() + ":" + pr.headRef();
+                return new Preview(draftId, "New PR on " + pr.repo() + from, d.kind,
                         null, null, pr, "https://github.com/" + pr.repo() + "/pulls", token, warning);
             }
             AgentOutput.DraftOut out = mapper.readValue(d.payload, AgentOutput.DraftOut.class);
@@ -487,7 +490,8 @@ public class Poster {
     }
 
     /**
-     * Fills in where a PR draft's commit goes: a new branch on your fork of the repo, which must exist and be public.
+     * Fills in where a PR draft's commit goes: a new branch on your fork of the repo, or, when you have no fork but
+     * can push to the repo (you maintain it), a new branch on the repo itself. The repo must be public.
      * Returns a warning when open PRs already mention the issue (check before opening another), or null.
      */
     private String resolvePrTarget(long draftId, String githubToken, String login) {
@@ -499,12 +503,17 @@ public class Poster {
             throw new IllegalStateException(pr.repo() + " isn't a public repo, so the desk won't open a PR there.");
         }
         String fork = login + "/" + pr.repo().substring(pr.repo().indexOf('/') + 1);
-        if (!github.isForkOf(githubToken, fork, pr.repo())) {
-            throw new IllegalStateException("You have no fork of " + pr.repo() + " at " + fork + ". Fork it on GitHub first,"
-                    + " then preview again.");
+        String headRepo;
+        if (github.isForkOf(githubToken, fork, pr.repo())) {
+            headRepo = fork;
+        } else if (github.canPush(githubToken, pr.repo())) {
+            headRepo = pr.repo();
+        } else {
+            throw new IllegalStateException("You have no fork of " + pr.repo() + " at " + fork + ", and you can't push to "
+                    + pr.repo() + " itself. Fork it on GitHub first, then preview again.");
         }
         DeskThread t = store.thread(d.threadId);
-        PrOut resolved = pr.withTarget(fork, "fix-" + t.number() + "-" + pr.to().substring(0, 7));
+        PrOut resolved = pr.withTarget(headRepo, "fix-" + t.number() + "-" + pr.to().substring(0, 7));
         d.payload = mapper.valueToTree(resolved).toString();
         store.save(d.threadId);
         List<GitHub.LinkedPr> open;
@@ -536,10 +545,12 @@ public class Poster {
     private Push openPr(Draft draft, DeskThread t, boolean asDraft) {
         PrOut pr = readPr(draft.payload);
         if (pr.headRepo() == null || pr.headRef() == null) throw new IllegalStateException("Preview it again before opening the PR");
-        try {
-            writes.syncFork(pr.headRepo(), pr.base());
-        } catch (GitHubWriter.WriteFailed e) {
-            // Not needed for the push to work, only to keep it small (a fork whose branch diverged can't sync).
+        if (!pr.headRepo().equalsIgnoreCase(pr.repo())) {
+            try {
+                writes.syncFork(pr.headRepo(), pr.base());
+            } catch (GitHubWriter.WriteFailed e) {
+                // Not needed for the push to work, only to keep it small (a fork whose branch diverged can't sync).
+            }
         }
         draft.pushing = new Draft.Pushing(pr.from(), pr.to(), clock.instant(), asDraft);
         store.save(t.id);

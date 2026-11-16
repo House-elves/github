@@ -3,6 +3,12 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.18.0
+
+- Opening a PR on a repo you maintain no longer needs a fork: when you have no fork but can push to the repo, the fix
+  goes on a new branch of the repo itself (fix-<issue>-<commit>), and the preview says so. With a fork, it still goes
+  there.
+
 ## 1.17.0
 
 - A review's inline comment on a line the PR doesn't change (GitHub won't take it there) no longer stops the review

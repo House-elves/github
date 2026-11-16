@@ -74,7 +74,7 @@ It writes its files in `~/.config/github/` (each written whole, then moved into 
 | `agents/`     | the runner's reports on the elf's agents, and the files they left (the runner writes this one)          |
 
 On GitHub it writes only what you click and confirm in the desk's bar: reviews, comments, new issues and PRs
-(from your fork), closing an item, assigning yourself, marking your PR ready, merges pinned to the head you saw
+(from your fork, or a new branch on a repo you can push to), closing an item, assigning yourself, marking your PR ready, merges pinned to the head you saw
 (merge on green waits for CI and checks again on each refresh), re-running and approving CI, and updating a branch.
 An agent's commits are pushed by the runner, from its worktree, when you confirm
 the push. Every write is in `state/actions.json`. The elf refuses any other write itself, with the same
