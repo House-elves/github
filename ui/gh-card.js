@@ -1,7 +1,7 @@
 // The GitHub elf's dashboard card: the board in one sentence, as the desk's dashboard drew it (desk-dashboard.js,
 // _github), from board/board.json. Its counts link to the board; the desk draws the card's panel and title.
 import { LitElement, html, shared, cardStyles, spinner, ago, Ticking, elf } from '/elf-kit/1/kit.js';
-import { boardHeadline } from './shared.js';
+import { boardHeadline, loadFilter, pickedWords } from './shared.js';
 import { board } from './api.js';
 
 class GhCard extends LitElement {
@@ -11,6 +11,7 @@ class GhCard extends LitElement {
         _state: { state: true },
         _loaded: { state: true },
         _error: { state: true },
+        _filter: { state: true },
     };
 
     static styles = [shared, cardStyles];
@@ -35,6 +36,8 @@ class GhCard extends LitElement {
         try {
             this._board = await board();
             this._state = await elf.state();
+            // The board's tab filter (tags, accounts) counts here too: "Work" shows only what Work waits on.
+            this._filter = await loadFilter();
             this._error = null;
         } catch (e) {
             this._error = e?.message ?? String(e);
@@ -50,7 +53,7 @@ class GhCard extends LitElement {
             : 'No board yet. Refresh it from its tab.';
         // A link to # opens the tab (the kit's links): the board, where these are.
         if (b.scopeEmpty) return html`Pick what to watch in <a href="#">GitHub's settings</a>, and your work shows up here.`;
-        return boardHeadline(b, (_, text) => html`<a href="#">${text}</a>`);
+        return boardHeadline(b, (_, text) => html`<a href="#">${text}</a>`, this._filter);
     }
 
     render() {
@@ -59,11 +62,13 @@ class GhCard extends LitElement {
         const b = this._board;
         const fetching = !!this._state?.running?.refresh;
         const failed = !fetching && this._state?.failed?.refresh;
+        const only = b && !b.scopeEmpty ? pickedWords(b, this._filter) : null;
         return html`<p class="say">${this._say()}</p>
             <div class="meta">${b ? html`
                 <span>Runner ${b.runnerConnected ? 'online' : 'offline'}</span>
                 <span>${fetching ? html`<span class="running" role="status">${spinner}Fetching from GitHub</span>`
-                    : html`Updated ${ago(b.fetchedAt)}`}</span>` : ''}
+                    : html`Updated ${ago(b.fetchedAt)}`}</span>
+                ${only ? html`<span title="As the board's filter is set, in its tab">Only ${only}</span>` : ''}` : ''}
                 ${failed ? html`<span class="error">The last refresh failed</span>` : ''}</div>`;
     }
 }

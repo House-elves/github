@@ -3,6 +3,13 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.19.0
+
+- The board's filter now counts in its headline and on the dashboard card: pick Work (or My PR, say) and "3 things
+  need your move" counts only those, so when everything of Work's is done it says Nothing needs you right now, however
+  much waits in Personal. The card says what it shows only (**Only Work**). The filter's words still only narrow the
+  rows.
+
 ## 1.18.0
 
 - Opening a PR on a repo you maintain no longer needs a fork: when you have no fork but can push to the repo, the fix

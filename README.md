@@ -33,7 +33,8 @@ login`), and give each a name, such as Work or Personal. `GITHUB_ACCOUNT` is alw
 GitHub as each of them, at the same time, and the board shows every item once. An item belongs to the account it's
 most yours as: the one whose PR it is, then one asked to review it, then one it's assigned to, then one only involved
 (the first account wins a tie). Its row is tagged with that account's name (+1 when another account has it too),
-and the filter can show one account's items.
+and the filter can show one account's items. The accounts and tags you pick in the filter count in the board's
+headline and on the dashboard card too ("Only Work"), so they say what waits on the accounts you're looking at.
 
 Everything you do with an item is done as the account it belongs to, and the desk's bar names it before anything is
 written ("Close ... on GitHub, as phillip-kruger?"). If the item has since moved to another account, the elf

@@ -1,7 +1,7 @@
 // What the board's views share, from the desk's shared.js: the PR and issue icon, the status chips, the checks
 // behind Merge and the CI and conflict menus, thread links, and the items seen on the board. The kit has the rest
 // (styles, markdown, ago, spinner, Ticking).
-import { html, svg, spinner, count, joinParts } from '/elf-kit/1/kit.js';
+import { html, svg, spinner, count, joinParts, elf } from '/elf-kit/1/kit.js';
 
 /** The Settings button in a tab's title row: opens the board's settings above its content. */
 export function settingsToggle(open, onClick) {
@@ -121,19 +121,62 @@ export function itemChips(item, { ciMenu = false, conflictMenu = false, approval
 
 // ---- the board in one sentence (the board's title, and the dashboard card) ----
 
-/** How many items wait on each: { you: 3, agent: 1, ... }. */
-export function waitingCounts(b) {
+/** A row's tag, by its flow's role. */
+export const ROLES = { mine: 'My PR', review: 'Review', issue: 'Issue', involved: 'Involved' };
+
+/**
+ * The board's filter: the text, the tags picked, and the accounts picked (logins). The tab's frame has no storage of
+ * its own, so the desk keeps it in this browser (elf.store), for the tab and the dashboard card alike.
+ */
+export const FILTER = 'board-filter';
+
+export async function loadFilter() {
+    try {
+        const f = JSON.parse((await elf.store.get(FILTER)) ?? 'null');
+        return { text: f?.text ?? '', tags: new Set(f?.tags ?? []), accounts: new Set(f?.accounts ?? []) };
+    } catch { return { text: '', tags: new Set(), accounts: new Set() }; }
+}
+
+/** The accounts picked in the filter that are still on the board (none when it has only one). */
+export function accountsPicked(b, filter) {
+    if (!manyAccounts(b)) return new Set();
+    const logins = new Set((b?.accounts ?? []).map(a => a.login));
+    return new Set([...(filter?.accounts ?? [])].filter(l => logins.has(l)));
+}
+
+/**
+ * Whether an item is in the tags and accounts picked (all of them when none are), the filter's text aside: what
+ * the board's headline and the dashboard card count.
+ */
+export function picked(b, filter, itemKey, flow) {
+    if (filter?.tags?.size && !filter.tags.has(flow?.role)) return false;
+    const accounts = accountsPicked(b, filter);
+    return !accounts.size || accounts.has(loginFor(b, itemKey));
+}
+
+/** What the filter shows only, in words ("Work, My PR"), or null when it shows everything (its text aside). */
+export function pickedWords(b, filter) {
+    const words = [...accountsPicked(b, filter)].map(l => accountName(b, l))
+        .concat([...(filter?.tags ?? [])].map(t => ROLES[t] ?? t));
+    return words.length ? words.join(', ') : null;
+}
+
+/** How many items wait on each: { you: 3, agent: 1, ... }; with a filter, of the tags and accounts picked. */
+export function waitingCounts(b, filter) {
     const n = {};
-    Object.values(b?.flows ?? {}).forEach(f => { n[f.waiting] = (n[f.waiting] ?? 0) + 1; });
+    Object.entries(b?.flows ?? {}).forEach(([key, f]) => {
+        if (picked(b, filter, key, f)) n[f.waiting] = (n[f.waiting] ?? 0) + 1;
+    });
     return n;
 }
 
 /**
  * Where things stand, in one sentence: "3 things need your move, an agent is working on 1 and 2 wait on CI."
- * `link(sectionId, text)` renders the counts that lead to a section.
+ * `link(sectionId, text)` renders the counts that lead to a section. With a filter, only the tags and accounts
+ * picked count.
  */
-export function boardHeadline(b, link) {
-    const n = waitingCounts(b);
+export function boardHeadline(b, link, filter) {
+    const n = waitingCounts(b, filter);
     const parts = [];
     if (n.you) parts.push(html`${link('you', count(n.you, 'thing'))} ${n.you === 1 ? 'needs' : 'need'} your move`);
     if (n.agent) parts.push(html`${parts.length ? 'an' : 'An'} agent is working on ${link('agent', count(n.agent, 'item'))}`);

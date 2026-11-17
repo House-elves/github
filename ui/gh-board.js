@@ -5,7 +5,7 @@ import { LitElement, html, css, shared, ago, spinner, Ticking, count, elf } from
 import {
     linkedPrChips, labelChips, qualityGateChip, rememberLinks, itemChips, ciFailing, hasConflicts, mergeableAnyway, kindIcon, threadHref, rememberItem,
     settingsToggle, isDependabot, lastBoard, setLastBoard, boardHeadline, usd, COST_HINT,
-    accountsOf, loginFor, accountName, manyAccounts, isMine } from './shared.js';
+    accountsOf, loginFor, accountName, manyAccounts, isMine, FILTER, loadFilter, accountsPicked, ROLES } from './shared.js';
 import { act, board, cancelled, errorMessage, squash, startAgent } from './api.js';
 import './merge-control.js';
 import './ci-menu.js';
@@ -29,7 +29,6 @@ const SECTIONS = [
     { id: 'watching', title: 'Just involved', fold: true },
 ];
 
-const ROLES = { mine: 'My PR', review: 'Review', issue: 'Issue', involved: 'Involved' };
 
 /** A row's tag. "Just involved" says how you're involved in its heading, so its rows say what they are. */
 function roleTag(item, role) {
@@ -37,19 +36,7 @@ function roleTag(item, role) {
     return ROLES[role] ?? role;
 }
 
-/**
- * The board's filter: the text, the tags picked, and the accounts picked (logins). The tab's frame has no storage of
- * its own, so the desk keeps it in this browser (elf.store), and this frame keeps it while it's open.
- */
-const FILTER = 'board-filter';
 let filter = null;
-
-async function loadFilter() {
-    try {
-        const f = JSON.parse((await elf.store.get(FILTER)) ?? 'null');
-        return { text: f?.text ?? '', tags: new Set(f?.tags ?? []), accounts: new Set(f?.accounts ?? []) };
-    } catch { return { text: '', tags: new Set(), accounts: new Set() }; }
-}
 
 /**
  * Whether an item passes the filter: every word of the text is in its title, repo, number, tag, author or account
@@ -664,8 +651,7 @@ class GhBoard extends LitElement {
 
     /** The accounts picked in the filter that are still on the board. */
     _accountsPicked() {
-        const logins = new Set((this._board?.accounts ?? []).map(a => a.login));
-        return new Set([...(this._filter.accounts ?? [])].filter(l => logins.has(l)));
+        return accountsPicked(this._board, this._filter);
     }
 
     /**
@@ -758,7 +744,7 @@ class GhBoard extends LitElement {
             <div class="page-top board-top"><div class="hero">
                 <span class="date">${DATE.format(new Date())}</span>
                 <h1>${b.scopeEmpty ? 'Pick what to watch, and your work shows up here.'
-                    : boardHeadline(b, (id, text) => html`<button @click=${() => this._jump(id)}>${text}</button>`)}</h1>
+                    : boardHeadline(b, (id, text) => html`<button @click=${() => this._jump(id)}>${text}</button>`, this._filter)}</h1>
                 <div class="status">
                     ${b.runnerConnected ? '' : html`<span class="runner">Runner offline</span>`}
                     <span class="muted updated">Updated ${ago(b.fetchedAt)}</span>
