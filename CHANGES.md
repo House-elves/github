@@ -3,6 +3,13 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.20.0
+
+- Dependabot's mvnpm bumps of scoped packages (org.mvnpm.at.…, like vaadin-webcomponents) no longer show on the board
+  as well as on the mvnpm tab.
+- The board leaves mvnpm bumps to the mvnpm tab only when the mvnpm elf is installed, and only in the repos it checks.
+  Without it, they're on the board like any other PR. The Merged list does the same.
+
 ## 1.19.0
 
 - The board's filter now counts in its headline and on the dashboard card: pick Work (or My PR, say) and "3 things

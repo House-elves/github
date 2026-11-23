@@ -3,6 +3,7 @@ package io.github.houseelves.github.board;
 import static io.github.houseelves.github.Items.issue;
 import static io.github.houseelves.github.Items.pr;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -117,14 +118,42 @@ class BoardClassifierTest {
     }
 
     @Test
-    void aDependabotMvnpmBumpIsLeftToTheMvnpmTab() throws Exception {
+    void aDependabotMvnpmBumpIsLeftToTheMvnpmTabOnlyWhenItsInstalledAndChecksThatRepo() throws Exception {
         Item bump = pr("quarkusio/quarkus", 50124, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
                 "dependabot/maven/org.mvnpm-lit-3.3.3", "xyz");
+        Item scoped = pr("quarkusio/quarkus", 58593, "dependabot",
+                "Bump org.mvnpm.at.mvnpm:vaadin-webcomponents from 25.3.5 to 25.3.6",
+                "dependabot/maven/main/org.mvnpm.at.mvnpm-vaadin-webcomponents-25.3.6", "def");
         Item other = pr("quarkusio/quarkus", 50125, "dependabot", "Bump io.smallrye:jandex from 3.2.0 to 3.2.1",
                 "dependabot/maven/io.smallrye-jandex-3.2.1", "abc");
-        Board b = classify(List.of(bump, other), List.of(bump, other), QUARKUS_AND_SMALLRYE);
-        assertEquals(List.of("quarkusio/quarkus#50125"), lane(b, BoardClassifier.REVIEW));
+        Item elsewhere = pr("smallrye/smallrye-config", 900, "dependabot", "Bump org.mvnpm:lit from 3.3.1 to 3.3.3",
+                "dependabot/maven/org.mvnpm-lit-3.3.3", "ghi");
+        List<Item> all = List.of(bump, scoped, other, elsewhere);
+        var f = new BoardClassifier.Fetched(ME, Instant.parse("2026-10-06T07:00:00Z"), all, all, List.of(), false);
+
+        // Installed, checking quarkusio/quarkus: its bumps there (scoped packages too) are its tab's.
+        Board b = BoardClassifier.classify(f, QUARKUS_AND_SMALLRYE, 5, Set.of(), Set.of(), Set.of("quarkusio/quarkus"));
+        assertEquals(Set.of("quarkusio/quarkus#50125", "smallrye/smallrye-config#900"), Set.copyOf(lane(b, BoardClassifier.REVIEW)));
         assertTrue(b.hidden().isEmpty());
         assertTrue(b.ignored().isEmpty());
+
+        // Not installed: they're on the board like any other PR.
+        b = BoardClassifier.classify(f, QUARKUS_AND_SMALLRYE, 5, Set.of(), Set.of(), Set.of());
+        assertEquals(4, lane(b, BoardClassifier.REVIEW).size());
+    }
+
+    @Test
+    void theMvnpmElfsReposComeFromItsConfigOnlyWhenItsThere(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)
+            throws Exception {
+        java.nio.file.Path config = dir.resolve("config");
+        assertEquals(Set.of(), MvnpmElf.repos(config));
+        java.nio.file.Files.writeString(config, "GITHUB_USER=me\n");
+        assertEquals(Set.of("quarkusio/quarkus"), MvnpmElf.repos(config));
+        java.nio.file.Files.writeString(config, "REPOS=quarkusio/quarkus, SmallRye/smallrye-graphql\nGITHUB_USER=me\n");
+        assertEquals(Set.of("quarkusio/quarkus", "smallrye/smallrye-graphql"), MvnpmElf.repos(config));
+        assertTrue(MvnpmElf.handles(Set.of("quarkusio/quarkus"), "quarkusio/quarkus", "dependabot[bot]",
+                "Bump org.mvnpm:lit from 3.3.1 to 3.3.3", null));
+        assertFalse(MvnpmElf.handles(Set.of("quarkusio/quarkus"), "quarkusio/quarkus", "phillip-kruger",
+                "Bump org.mvnpm:lit from 3.3.1 to 3.3.3", null));
     }
 }

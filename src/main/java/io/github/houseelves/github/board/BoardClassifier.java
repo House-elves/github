@@ -16,7 +16,8 @@ import io.github.houseelves.github.scope.Scope;
  * Sorts fetched items into the board's lanes. Pure: no I/O, so the rules are
  * easy to test. Order of precedence, first match wins:
  * <ol>
- * <li>Dependabot's org.mvnpm bumps are left out: the mvnpm tab (the mvnpm-dependabot elf) handles them;</li>
+ * <li>Dependabot's org.mvnpm bumps in the repos the mvnpm elf checks are left out, when it's installed: its tab
+ * handles them ({@link MvnpmElf});</li>
  * <li>anything you chose to ignore goes to the ignored list;</li>
  * <li>anything outside the scope is hidden, review requests included;</li>
  * <li>your own PRs; then PRs you were asked to review or have reviewed (they stay until merged or closed, even
@@ -37,14 +38,6 @@ public final class BoardClassifier {
     private BoardClassifier() {
     }
 
-    /** A Dependabot PR bumping an org.mvnpm dependency: the mvnpm tab's, not the board's. */
-    static boolean mvnpmBump(Item item) {
-        String author = item.author() == null ? "" : item.author().toLowerCase(java.util.Locale.ROOT);
-        return item.isPr() && author.matches("(app/)?dependabot(\\[bot])?")
-                && ((item.title() != null && item.title().contains("org.mvnpm:"))
-                        || (item.headRef() != null && item.headRef().contains("org.mvnpm-")));
-    }
-
     /** What was fetched from GitHub, before any classification. */
     public record Fetched(String login, Instant at, List<Item> involved, List<Item> reviewRequested,
             List<Item> reviewedByMe, boolean truncated) {
@@ -58,8 +51,16 @@ public final class BoardClassifier {
         return classify(f, scope, refreshMinutes, ignoredKeys, Set.of());
     }
 
-    /** @param maintained repos you maintain (lower case): their issues are yours unless someone else has them */
     public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys, Set<String> maintained) {
+        return classify(f, scope, refreshMinutes, ignoredKeys, maintained, Set.of());
+    }
+
+    /**
+     * @param maintained repos you maintain (lower case): their issues are yours unless someone else has them
+     * @param mvnpmRepos the repos (lower case) whose mvnpm bumps the mvnpm elf checks: empty when it isn't installed
+     */
+    public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys, Set<String> maintained,
+            Set<String> mvnpmRepos) {
         List<Item> ignored = new ArrayList<>();
         Set<String> reviewKeys = new HashSet<>();
         f.reviewRequested().forEach(i -> reviewKeys.add(i.key()));
@@ -71,7 +72,7 @@ public final class BoardClassifier {
         List<Item> hidden = new ArrayList<>();
 
         for (Item item : all.values()) {
-            if (mvnpmBump(item)) {
+            if (item.isPr() && MvnpmElf.handles(mvnpmRepos, item.repo(), item.author(), item.title(), item.headRef())) {
                 continue;
             } else if (ignoredKeys.contains(item.key())) {
                 ignored.add(item);

@@ -163,7 +163,11 @@ public class GitHubElf {
             Views.writeAll(elf);
             if (merged != null) {
                 var skipped = io.github.houseelves.github.backport.Backports.skipped(home.state());
-                merged = merged.stream().filter(m -> !skipped.containsKey(m.key())).toList();
+                // The mvnpm elf's bumps (when it's installed) are on its own Merged list, not here too.
+                var mvnpm = io.github.houseelves.github.board.MvnpmElf.repos();
+                merged = merged.stream().filter(m -> !skipped.containsKey(m.key()))
+                        .filter(m -> !io.github.houseelves.github.board.MvnpmElf.handles(mvnpm, m.repo(), m.author(), m.title(), null))
+                        .toList();
                 io.github.houseelves.github.elf.Json.write(home.board().resolve("merged.json"),
                         io.github.houseelves.github.backport.Backports.view(java.time.Instant.now(), merged));
             }
