@@ -3,6 +3,14 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.21.0
+
+- Merge on a PR that's behind its base (the repo wants PRs up to date) no longer says "is behind its base branch": it
+  rebases the PR on its base for you (on a Dependabot PR, it asks Dependabot to), and merges the rebased PR once CI is
+  green again. It merges only if the rebase changes the same lines you saw; anything else stops it, as new commits did
+  before. If the base moves on again meanwhile, it's brought up to date again. Cancel stops it, and it gives up after
+  a day.
+
 ## 1.20.0
 
 - Dependabot's mvnpm bumps of scoped packages (org.mvnpm.at.…, like vaadin-webcomponents) no longer show on the board

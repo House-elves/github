@@ -19,6 +19,19 @@ public class MergeWatch {
 
     public String state = WAITING;
 
+    /**
+     * The PR's change when you clicked (a hash of the lines it adds and removes, file by file), kept when the desk
+     * brought it up to date with its base for you: a new head with this same change is the rebase, and the merge
+     * follows it. Null otherwise: then any new head stops the merge.
+     */
+    public String change;
+
+    /** When the desk last brought it up to date (rebased it, or asked Dependabot to), or null. */
+    public Instant updated;
+
+    /** The head it had then: it's brought up to date again only once that rebase landed and it fell behind again. */
+    public String updatedFrom;
+
     /** False for "Merge without approval": you merged without an approval, so a missing approval doesn't stop it. */
     public boolean requireApproval = true;
 

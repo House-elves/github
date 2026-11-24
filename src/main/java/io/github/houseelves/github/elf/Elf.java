@@ -74,6 +74,7 @@ public class Elf {
         this.merges = new MergeService(home.state(), github, writer, store, live);
         this.ci = new CiService(github, writer, threads, store, live);
         this.conflicts = new ConflictService(github, writer, threads, store, live);
+        this.merges.updater((itemKey, login, token) -> conflicts.updateBranch(itemKey, "REBASE", login, token));
         this.api = new BoardApi(accounts, boards, scopes, settings, threads, poster, merges, ci,
                 github, conflicts, ignores, later, live);
         this.backports = io.github.houseelves.github.backport.Backports.real(home.dir().resolve("git"));

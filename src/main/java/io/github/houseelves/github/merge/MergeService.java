@@ -39,12 +39,26 @@ public class MergeService {
     private final Path file;
     private List<MergeWatch> watches;
 
+    /** Brings a PR that's behind its base up to date ("rebased", "rebase-requested"): ConflictService's Update branch. */
+    public interface Updater {
+        String update(String itemKey, String login, String token);
+    }
+
+    private Updater updater;
+
+    /** How long after bringing a PR up to date it's left alone before it's done again (its base moved on meanwhile). */
+    static final java.time.Duration UPDATE_AGAIN_AFTER = java.time.Duration.ofMinutes(10);
+
     public MergeService(Path stateDir, GitHub github, GitHubWriter writer, ThreadStore store, Live live) {
         this.file = stateDir.resolve("merges.json");
         this.github = github;
         this.writer = writer;
         this.store = store;
         this.live = live;
+    }
+
+    public void updater(Updater updater) {
+        this.updater = updater;
     }
 
     private synchronized List<MergeWatch> all() {
@@ -116,9 +130,15 @@ public class MergeService {
         }
         // GitHub's mergeStateStatus: CLEAN means every required check passed and nothing else blocks it. UNKNOWN
         // (still computing) is allowed through and settled by the next check round.
-        if (!Item.requiredChecksPassed(pr.mergeState()) && !"UNKNOWN".equals(pr.mergeState())) {
+        // Behind its base (the repo wants it up to date): brought up to date first, then merged once CI is green again.
+        boolean behind = "BEHIND".equals(pr.mergeState()) && !"CONFLICTING".equals(pr.mergeable());
+        String change = behind ? change(itemKey, token) : null;
+        if (behind && (updater == null || change == null)) {
+            throw new IllegalStateException(itemKey + " is behind its base branch, and the repo requires it to be up to date. "
+                    + "Update the branch, then merge it.");
+        }
+        if (!behind && !Item.requiredChecksPassed(pr.mergeState()) && !"UNKNOWN".equals(pr.mergeState())) {
             throw new IllegalStateException(switch (pr.mergeState()) {
-                case "BEHIND" -> itemKey + " is behind its base branch, and the repo requires it to be up to date.";
                 case "DIRTY" -> itemKey + " has merge conflicts.";
                 default -> "GitHub doesn't consider " + itemKey + " mergeable yet: required checks haven't all passed"
                         + (withoutApproval && !pr.approved() ? ", or the repo requires an approval." : ".");
@@ -140,11 +160,25 @@ public class MergeService {
         w.headSha = headSha;
         w.login = login;
         w.requireApproval = !withoutApproval;
+        w.change = change;
         all().add(w);
         save();
         note(itemKey, withoutApproval && !pr.approved()
                 ? "You asked to merge this without an approval (" + method + ")."
                 : "You asked to merge this (" + method + ").");
+        if (behind) {
+            try {
+                update(w, token);
+            } catch (RuntimeException e) {
+                end(w, MergeWatch.FAILED, "It's behind its base and couldn't be brought up to date: " + e.getMessage());
+                announce(itemKey);
+                throw new IllegalStateException(itemKey + " is behind its base branch and couldn't be brought up to date: "
+                        + e.getMessage());
+            }
+            announce(itemKey);
+            return view(itemKey);
+        }
+        tokenFor = token;
         check(itemKey, pr);
         announce(itemKey);
         return view(itemKey);
@@ -182,6 +216,7 @@ public class MergeService {
     /** The round for the watches {@code by} accepts the asker of (null: asked before the board had accounts). */
     public void poll(String token, java.util.function.Predicate<String> by) {
         List<MergeWatch> waiting = all().stream().filter(w -> w.state.equals(MergeWatch.WAITING) && by.test(w.login)).toList();
+        tokenFor = token;
         for (MergeWatch w : waiting) {
             try {
                 check(w.itemKey, github.pullState(token, repo(w.itemKey), number(w.itemKey)));
@@ -197,12 +232,88 @@ public class MergeService {
         if (w == null) return;
         w.checked = Instant.now();
         save();
+        if (w.change != null && !pr.headSha().equals(w.headSha) && "OPEN".equals(pr.state())
+                && w.change.equals(changeNow(itemKey))) {
+            // Rebased on its base (by the desk, or by Dependabot as asked) without changing what it changes.
+            w.headSha = pr.headSha();
+            save();
+            note(itemKey, "It's up to date with its base now (" + pr.headSha().substring(0, 7)
+                    + "), with the same change. It merges once CI is green.");
+            announce(itemKey);
+        }
+        if (w.change != null && pr.headSha().equals(w.headSha) && "BEHIND".equals(pr.mergeState())
+                && !"CONFLICTING".equals(pr.mergeable()) && updater != null && !pr.headSha().equals(w.updatedFrom)
+                && (w.updated == null || w.updated.isBefore(Instant.now().minus(UPDATE_AGAIN_AFTER)))) {
+            // Its base moved on again (another PR merged): up to date again, as you asked.
+            try {
+                update(w, tokenFor);
+            } catch (RuntimeException e) {
+                finish(w.id, MergeWatch.FAILED, "It fell behind its base again and couldn't be brought up to date: "
+                        + e.getMessage());
+            }
+            return;
+        }
         MergeDecision d = MergeDecision.decide(w.headSha, w.created, Instant.now(), pr, w.requireApproval);
         switch (d.step()) {
             case WAIT -> { }
             case DONE -> finish(w.id, pr.state().equals("MERGED") ? MergeWatch.MERGED : MergeWatch.CANCELLED, d.reason());
             case STOP -> finish(w.id, MergeWatch.FAILED, d.reason());
             case MERGE -> merge(w);
+        }
+    }
+
+    /** The token of the round that's checking (poll's), for bringing a PR up to date again. */
+    private String tokenFor;
+
+    private void update(MergeWatch w, String token) {
+        String how = updater.update(w.itemKey, w.login, token);
+        w.updated = Instant.now();
+        w.updatedFrom = w.headSha;
+        save();
+        note(w.itemKey, "rebase-requested".equals(how)
+                ? "It's behind its base, so Dependabot was asked to rebase it. It merges once that's done and CI is green."
+                : "It was behind its base, so it was rebased on it. It merges once CI is green.");
+    }
+
+    /** The PR's change now (see {@link MergeWatch#change}), or null when GitHub won't show it. */
+    String change(String itemKey, String token) {
+        GitHub.Diff d = github.prDiff(token, repo(itemKey), number(itemKey), 5_000_000);
+        return d == null || d.cut() ? null : changeOf(d.text());
+    }
+
+    private String changeNow(String itemKey) {
+        try {
+            return change(itemKey, tokenFor);
+        } catch (RuntimeException e) {
+            LOG.warnf("Merge on green: couldn't read the change of %s: %s", itemKey, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * What a unified diff adds and removes, file by file, hashed: context lines and hunk positions left out, as they
+     * move when the base does.
+     */
+    static String changeOf(String diff) {
+        java.util.List<String> files = new ArrayList<>();
+        StringBuilder f = null;
+        for (String line : diff.split("\n", -1)) {
+            if (line.startsWith("diff --git ")) {
+                if (f != null) files.add(f.toString());
+                f = new StringBuilder(line).append('\n');
+            } else if (f != null && (line.startsWith("+") || line.startsWith("-"))) {
+                f.append(line).append('\n');
+            }
+        }
+        if (f != null) files.add(f.toString());
+        if (files.isEmpty()) return null;
+        files.sort(null);
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(String.join("\u0001", files).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(h);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 

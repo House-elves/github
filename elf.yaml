@@ -2,7 +2,7 @@
 # the PRs and issues you're involved in, an agent per item, and every GitHub write behind a click.
 name: github
 title: GitHub
-version: 1.20.0
+version: 1.21.0
 author: "@phillip-kruger"
 description: Your GitHub board. The PRs and issues you're involved in, sorted by whose move it is, with an agent on each. Nothing is written to GitHub without your click.
 main: GitHubElf.java
@@ -465,7 +465,7 @@ actions:
   merge-on-green:
     label: Merge when CI is green
     args: [--action=merge-on-green]
-    confirm: "Merge {itemKey} ({method}) as {as} once CI is green, at the head you saw?"
+    confirm: "Merge {itemKey} ({method}) as {as} once CI is green, at the head you saw? If it's behind its base, it's rebased on it first (a Dependabot PR: Dependabot is asked to), and the rebase merges once CI is green again, if it changes the same lines."
     params:
       # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
       as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}
@@ -475,7 +475,7 @@ actions:
   merge-without-approval:
     label: Merge without an approval
     args: [--action=merge-without-approval]
-    confirm: "Merge {itemKey} ({method}) as {as} without an approval, once CI is green?"
+    confirm: "Merge {itemKey} ({method}) as {as} without an approval, once CI is green? If it's behind its base, it's rebased on it first, and the rebase merges once CI is green again, if it changes the same lines."
     params:
       # The account it's done as, for the confirm bar's words: the elf refuses it unless that's the item's account.
       as: {pattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}', max: 39, optional: true}

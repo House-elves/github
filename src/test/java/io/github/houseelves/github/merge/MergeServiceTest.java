@@ -109,10 +109,90 @@ class MergeServiceTest {
                 "OPEN", false, SHA, "SUCCESS", "MERGEABLE", "BLOCKED", "APPROVED", List.of("merge"), "merge", true));
         var e = assertThrows(IllegalStateException.class, () -> merges.request(KEY, "merge", SHA, "me", "t"));
         assertTrue(e.getMessage().contains("required checks haven't all passed"));
+    }
+
+    static final String DIFF = "diff --git a/pom.xml b/pom.xml\nindex 1..2\n--- a/pom.xml\n+++ b/pom.xml\n@@ -10,3 +10,3 @@\n"
+            + " <a>1</a>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
+    static final String REBASED = "diff --git a/pom.xml b/pom.xml\nindex 3..4\n--- a/pom.xml\n+++ b/pom.xml\n@@ -12,3 +12,3 @@\n"
+            + " <a>2</a>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
+    static final String NEW = "d".repeat(40);
+
+    void stateIs(String sha, String ci, String mergeState) {
         when(github.pullState(anyString(), eq("quarkusio/quarkus"), eq(50031))).thenReturn(new GitHub.PullState("t", "u",
-                "OPEN", false, SHA, "SUCCESS", "MERGEABLE", "BEHIND", "APPROVED", List.of("merge"), "merge", true));
+                "OPEN", false, sha, ci, "MERGEABLE", mergeState, "APPROVED", List.of("merge"), "merge", true));
+    }
+
+    @Test
+    void mergeOnAPrBehindItsBaseBringsItUpToDateAndMergesTheRebaseOnceGreen() throws Exception {
+        List<String> updates = new java.util.ArrayList<>();
+        merges.updater((k, login, token) -> { updates.add(k); return "rebased"; });
+        stateIs(SHA, "SUCCESS", "BEHIND");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(DIFF, false));
+        MergeService.View v = merges.request(KEY, "merge", SHA, "me", "t");
+        assertEquals("waiting", v.state());
+        assertEquals(List.of(KEY), updates);
+        verify(writer, never()).merge(anyString(), anyInt(), anyString(), anyString());
+
+        // Not rebased yet: it waits, and isn't updated again.
+        merges.poll("t");
+        assertEquals(1, updates.size());
+        assertEquals("waiting", merges.view(KEY).state());
+
+        // Rebased, the same change; CI running: waits. Then green: merges the rebased head.
+        stateIs(NEW, "PENDING", "BLOCKED");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(REBASED, false));
+        merges = again();
+        merges.updater((k, login, token) -> { updates.add(k); return "rebased"; });
+        merges.poll("t");
+        assertEquals("waiting", merges.view(KEY).state());
+        stateIs(NEW, "SUCCESS", "CLEAN");
+        when(writer.merge("quarkusio/quarkus", 50031, "merge", NEW)).thenReturn(mapper.readTree("{\"sha\": \"abcdef12\"}"));
+        merges.poll("t");
+        assertEquals("merged", merges.view(KEY).state());
+        verify(writer).merge("quarkusio/quarkus", 50031, "merge", NEW);
+        assertEquals(1, updates.size());
+    }
+
+    @Test
+    void aRebaseThatChangesThePrStopsTheMerge() {
+        merges.updater((k, login, token) -> "rebased");
+        stateIs(SHA, "SUCCESS", "BEHIND");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(DIFF, false));
+        merges.request(KEY, "merge", SHA, "me", "t");
+        stateIs(NEW, "SUCCESS", "CLEAN");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt()))
+                .thenReturn(new GitHub.Diff(DIFF + "+<more/>\n", false));
+        merges.poll("t");
+        assertEquals("failed", merges.view(KEY).state());
+        verify(writer, never()).merge(anyString(), anyInt(), anyString(), anyString());
+    }
+
+    @Test
+    void fallingBehindAgainAfterTheRebaseUpdatesItAgain() {
+        List<String> updates = new java.util.ArrayList<>();
+        merges.updater((k, login, token) -> { updates.add(k); return "rebase-requested"; });
+        stateIs(SHA, "SUCCESS", "BEHIND");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(DIFF, false));
+        merges.request(KEY, "merge", SHA, "me", "t");
+        stateIs(NEW, "SUCCESS", "BEHIND");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(REBASED, false));
+        merges.poll("t"); // follows the rebase; updated a moment ago, so not again yet
+        assertEquals(1, updates.size());
+        assertEquals("waiting", merges.view(KEY).state());
+    }
+
+    @Test
+    void behindWithoutAReadableChangeIsStillRefused() {
+        merges.updater((k, login, token) -> "rebased");
+        stateIs(SHA, "SUCCESS", "BEHIND");
         assertTrue(assertThrows(IllegalStateException.class, () -> merges.request(KEY, "merge", SHA, "me", "t"))
                 .getMessage().contains("behind its base branch"));
+    }
+
+    @Test
+    void theChangeLeavesOutContextAndPositions() {
+        assertEquals(MergeService.changeOf(DIFF), MergeService.changeOf(REBASED));
+        assertTrue(!MergeService.changeOf(DIFF).equals(MergeService.changeOf(DIFF + "+x\n")));
     }
 
     @Test
