@@ -132,7 +132,7 @@ public class MergeService {
         // (still computing) is allowed through and settled by the next check round.
         // Behind its base (the repo wants it up to date): brought up to date first, then merged once CI is green again.
         boolean behind = "BEHIND".equals(pr.mergeState()) && !"CONFLICTING".equals(pr.mergeable());
-        String change = behind ? change(itemKey, token) : null;
+        String change = behind ? change(itemKey, token, false) : null;
         if (behind && (updater == null || change == null)) {
             throw new IllegalStateException(itemKey + " is behind its base branch, and the repo requires it to be up to date. "
                     + "Update the branch, then merge it.");
@@ -233,7 +233,7 @@ public class MergeService {
         w.checked = Instant.now();
         save();
         if (w.change != null && !pr.headSha().equals(w.headSha) && "OPEN".equals(pr.state())
-                && w.change.equals(changeNow(itemKey))) {
+                && w.change.equals(changeNow(w))) {
             // Rebased on its base (by the desk, or by Dependabot as asked) without changing what it changes.
             w.headSha = pr.headSha();
             save();
@@ -269,6 +269,11 @@ public class MergeService {
         String how = updater.update(w.itemKey, w.login, token);
         w.updated = Instant.now();
         w.updatedFrom = w.headSha;
+        if ("rebase-requested".equals(how) && !w.dependabot) {
+            // Dependabot rebases it (it hasn't yet, so this is still the head you saw): its added and removed lines.
+            w.dependabot = true;
+            w.change = change(w.itemKey, token, true);
+        }
         save();
         note(w.itemKey, "rebase-requested".equals(how)
                 ? "It's behind its base, so Dependabot was asked to rebase it. It merges once that's done and CI is green."
@@ -276,32 +281,46 @@ public class MergeService {
     }
 
     /** The PR's change now (see {@link MergeWatch#change}), or null when GitHub won't show it. */
-    String change(String itemKey, String token) {
+    String change(String itemKey, String token, boolean addedAndRemovedOnly) {
         GitHub.Diff d = github.prDiff(token, repo(itemKey), number(itemKey), 5_000_000);
-        return d == null || d.cut() ? null : changeOf(d.text());
+        return d == null || d.cut() ? null : changeOf(d.text(), addedAndRemovedOnly);
     }
 
-    private String changeNow(String itemKey) {
+    private String changeNow(MergeWatch w) {
         try {
-            return change(itemKey, tokenFor);
+            return change(w.itemKey, tokenFor, w.dependabot);
         } catch (RuntimeException e) {
-            LOG.warnf("Merge on green: couldn't read the change of %s: %s", itemKey, e.getMessage());
+            LOG.warnf("Merge on green: couldn't read the change of %s: %s", w.itemKey, e.getMessage());
             return null;
         }
     }
 
+    /** Lines of a file's diff header that say what happens to the file itself: its mode, a rename or a copy. */
+    private static final java.util.regex.Pattern FILE_HEADER = java.util.regex.Pattern.compile(
+            "(old mode|new mode|new file mode|deleted file mode|rename from|rename to|copy from|copy to) .*");
+
     /**
-     * What a unified diff adds and removes, file by file, hashed: context lines and hunk positions left out, as they
-     * move when the base does.
+     * A unified diff, hashed without what a rebase moves: the hunks' line numbers. File by file: the file's mode,
+     * rename or copy, and each hunk in order with its context, removed and added lines. With
+     * {@code addedAndRemovedOnly} (Dependabot's PRs), context lines and hunk boundaries are left out too: they move as
+     * the other bumps merge. Null when it can't be told apart this way: no files, or a binary file (its diff shows no
+     * content).
      */
-    static String changeOf(String diff) {
+    static String changeOf(String diff, boolean addedAndRemovedOnly) {
         java.util.List<String> files = new ArrayList<>();
         StringBuilder f = null;
         for (String line : diff.split("\n", -1)) {
+            if (line.startsWith("Binary files ") || line.equals("GIT binary patch")) return null;
             if (line.startsWith("diff --git ")) {
                 if (f != null) files.add(f.toString());
                 f = new StringBuilder(line).append('\n');
-            } else if (f != null && (line.startsWith("+") || line.startsWith("-"))) {
+            } else if (f == null) {
+                continue;
+            } else if (line.startsWith("+") || line.startsWith("-") || FILE_HEADER.matcher(line).matches()) {
+                f.append(line).append('\n');
+            } else if (!addedAndRemovedOnly && line.startsWith("@@")) {
+                f.append("@@\n");
+            } else if (!addedAndRemovedOnly && (line.startsWith(" ") || line.startsWith("\\"))) {
                 f.append(line).append('\n');
             }
         }

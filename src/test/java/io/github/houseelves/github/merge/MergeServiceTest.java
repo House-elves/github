@@ -1,6 +1,8 @@
 package io.github.houseelves.github.merge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -115,6 +117,9 @@ class MergeServiceTest {
             + " <a>1</a>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
     static final String REBASED = "diff --git a/pom.xml b/pom.xml\nindex 3..4\n--- a/pom.xml\n+++ b/pom.xml\n@@ -12,3 +12,3 @@\n"
             + " <a>2</a>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
+    /** The same hunk with the same context, moved down by the base's change elsewhere. */
+    static final String MOVED = "diff --git a/pom.xml b/pom.xml\nindex 5..6\n--- a/pom.xml\n+++ b/pom.xml\n@@ -14,3 +14,3 @@\n"
+            + " <a>1</a>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
     static final String NEW = "d".repeat(40);
 
     void stateIs(String sha, String ci, String mergeState) {
@@ -140,7 +145,7 @@ class MergeServiceTest {
 
         // Rebased, the same change; CI running: waits. Then green: merges the rebased head.
         stateIs(NEW, "PENDING", "BLOCKED");
-        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(REBASED, false));
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(MOVED, false));
         merges = again();
         merges.updater((k, login, token) -> { updates.add(k); return "rebased"; });
         merges.poll("t");
@@ -190,9 +195,30 @@ class MergeServiceTest {
     }
 
     @Test
-    void theChangeLeavesOutContextAndPositions() {
-        assertEquals(MergeService.changeOf(DIFF), MergeService.changeOf(REBASED));
-        assertTrue(!MergeService.changeOf(DIFF).equals(MergeService.changeOf(DIFF + "+x\n")));
+    void theChangeLeavesOutLineNumbersOnlyAndContextOnlyForDependabot() {
+        assertEquals(MergeService.changeOf(DIFF, false), MergeService.changeOf(MOVED, false));
+        assertNotEquals(MergeService.changeOf(DIFF, false), MergeService.changeOf(REBASED, false));
+        assertEquals(MergeService.changeOf(DIFF, true), MergeService.changeOf(REBASED, true));
+        assertNotEquals(MergeService.changeOf(DIFF, true), MergeService.changeOf(DIFF + "+x\n", true));
+        // The same added line somewhere else in the file isn't the same change.
+        String elsewhere = "diff --git a/pom.xml b/pom.xml\n--- a/pom.xml\n+++ b/pom.xml\n@@ -90,3 +90,3 @@\n"
+                + " <b>9</b>\n-<lit>3.1</lit>\n+<lit>3.2</lit>\n";
+        assertNotEquals(MergeService.changeOf(DIFF, false), MergeService.changeOf(elsewhere, false));
+        assertNotEquals(MergeService.changeOf(DIFF, false), MergeService.changeOf(DIFF + "old mode 100644\nnew mode 100755\n", false));
+        assertNull(MergeService.changeOf("diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n", false));
+    }
+
+    @Test
+    void aNonDependabotRebaseWithOtherContextStopsTheMerge() {
+        merges.updater((k, login, token) -> "rebased");
+        stateIs(SHA, "SUCCESS", "BEHIND");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(DIFF, false));
+        merges.request(KEY, "merge", SHA, "me", "t");
+        stateIs(NEW, "SUCCESS", "CLEAN");
+        when(github.prDiff(anyString(), eq("quarkusio/quarkus"), eq(50031), anyInt())).thenReturn(new GitHub.Diff(REBASED, false));
+        merges.poll("t");
+        assertEquals("failed", merges.view(KEY).state());
+        verify(writer, never()).merge(anyString(), anyInt(), anyString(), anyString());
     }
 
     @Test

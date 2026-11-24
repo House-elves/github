@@ -7,7 +7,8 @@ offers you an update.
 
 - Merge on a PR that's behind its base (the repo wants PRs up to date) no longer says "is behind its base branch": it
   rebases the PR on its base for you (on a Dependabot PR, it asks Dependabot to), and merges the rebased PR once CI is
-  green again. It merges only if the rebase changes the same lines you saw; anything else stops it, as new commits did
+  green again. It merges only if the rebase is the change you saw, line for line with its context (on a Dependabot PR,
+  the same added and removed lines), and never a PR with binary files; anything else stops it, as new commits did
   before. If the base moves on again meanwhile, it's brought up to date again. Cancel stops it, and it gives up after
   a day.
 

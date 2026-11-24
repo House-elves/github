@@ -20,11 +20,17 @@ public class MergeWatch {
     public String state = WAITING;
 
     /**
-     * The PR's change when you clicked (a hash of the lines it adds and removes, file by file), kept when the desk
+     * The PR's change when you clicked (a hash of its diff without line numbers, see MergeService.changeOf), kept when the desk
      * brought it up to date with its base for you: a new head with this same change is the rebase, and the merge
      * follows it. Null otherwise: then any new head stops the merge.
      */
     public String change;
+
+    /**
+     * A Dependabot PR (Dependabot was asked to rebase it): only Dependabot pushes to it, and its context lines move as
+     * the other bumps merge, so {@link #change} is its added and removed lines only. Otherwise context counts too.
+     */
+    public boolean dependabot;
 
     /** When the desk last brought it up to date (rebased it, or asked Dependabot to), or null. */
     public Instant updated;
