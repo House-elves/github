@@ -3,6 +3,11 @@
 What changed for you in each version of the GitHub elf, newest first. The desk shows the parts that are new when it
 offers you an update.
 
+## 1.22.0
+
+- With the new Dependabot elf installed, Dependabot's PRs in the repos it handles leave the board for its tab, where a
+  merge queue rebases and merges the ones you queue. Without it, or in other repos, they stay on the board as before.
+
 ## 1.21.0
 
 - Merge on a PR that's behind its base (the repo wants PRs up to date) no longer says "is behind its base branch": it

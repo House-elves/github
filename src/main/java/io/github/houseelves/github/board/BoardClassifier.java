@@ -17,7 +17,8 @@ import io.github.houseelves.github.scope.Scope;
  * easy to test. Order of precedence, first match wins:
  * <ol>
  * <li>Dependabot's org.mvnpm bumps in the repos the mvnpm elf checks are left out, when it's installed: its tab
- * handles them ({@link MvnpmElf});</li>
+ * handles them ({@link MvnpmElf}), and so are all Dependabot PRs in the repos the Dependabot elf handles: its tab and
+ * merge queue have them ({@link DependabotElf});</li>
  * <li>anything you chose to ignore goes to the ignored list;</li>
  * <li>anything outside the scope is hidden, review requests included;</li>
  * <li>your own PRs; then PRs you were asked to review or have reviewed (they stay until merged or closed, even
@@ -55,12 +56,19 @@ public final class BoardClassifier {
         return classify(f, scope, refreshMinutes, ignoredKeys, maintained, Set.of());
     }
 
-    /**
-     * @param maintained repos you maintain (lower case): their issues are yours unless someone else has them
-     * @param mvnpmRepos the repos (lower case) whose mvnpm bumps the mvnpm elf checks: empty when it isn't installed
-     */
     public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys, Set<String> maintained,
             Set<String> mvnpmRepos) {
+        return classify(f, scope, refreshMinutes, ignoredKeys, maintained, mvnpmRepos, Set.of());
+    }
+
+    /**
+     * @param maintained      repos you maintain (lower case): their issues are yours unless someone else has them
+     * @param mvnpmRepos      the repos (lower case) whose mvnpm bumps the mvnpm elf checks: empty when it isn't installed
+     * @param dependabotRepos the repos (lower case) whose Dependabot PRs the Dependabot elf handles: empty when it isn't
+     *                        installed
+     */
+    public static Board classify(Fetched f, Scope scope, int refreshMinutes, Set<String> ignoredKeys, Set<String> maintained,
+            Set<String> mvnpmRepos, Set<String> dependabotRepos) {
         List<Item> ignored = new ArrayList<>();
         Set<String> reviewKeys = new HashSet<>();
         f.reviewRequested().forEach(i -> reviewKeys.add(i.key()));
@@ -72,7 +80,8 @@ public final class BoardClassifier {
         List<Item> hidden = new ArrayList<>();
 
         for (Item item : all.values()) {
-            if (item.isPr() && MvnpmElf.handles(mvnpmRepos, item.repo(), item.author(), item.title(), item.headRef())) {
+            if (item.isPr() && (MvnpmElf.handles(mvnpmRepos, item.repo(), item.author(), item.title(), item.headRef())
+                    || DependabotElf.handles(dependabotRepos, item.repo(), item.author()))) {
                 continue;
             } else if (ignoredKeys.contains(item.key())) {
                 ignored.add(item);

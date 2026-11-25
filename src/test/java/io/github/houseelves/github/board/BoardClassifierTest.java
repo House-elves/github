@@ -156,4 +156,36 @@ class BoardClassifierTest {
         assertFalse(MvnpmElf.handles(Set.of("quarkusio/quarkus"), "quarkusio/quarkus", "phillip-kruger",
                 "Bump org.mvnpm:lit from 3.3.1 to 3.3.3", null));
     }
+
+    @Test
+    void dependabotsPrsAreLeftToTheDependabotTabInTheReposItHandles() throws Exception {
+        Item bump = pr("smallrye/smallrye-graphql", 2813, "dependabot", "Bump org.mongodb:bson from 5.14.0 to 5.15.0",
+                "dependabot/maven/main/org.mongodb-bson-5.15.0", "abc");
+        Item grouped = pr("smallrye/smallrye-graphql", 2738, "app/dependabot", "Bump the quarkus group with 4 updates",
+                "dependabot/maven/quarkus-group", "def");
+        Item human = pr("smallrye/smallrye-graphql", 2820, "someone", "Bump org.mongodb:bson to 5.15.0", "bson", "ghi");
+        Item elsewhere = pr("quarkusio/quarkus", 50125, "dependabot", "Bump io.smallrye:jandex from 3.2.0 to 3.2.1",
+                "dependabot/maven/io.smallrye-jandex-3.2.1", "jkl");
+        List<Item> all = List.of(bump, grouped, human, elsewhere);
+        var f = new BoardClassifier.Fetched(ME, Instant.parse("2026-11-25T07:00:00Z"), all, all, List.of(), false);
+
+        Board b = BoardClassifier.classify(f, QUARKUS_AND_SMALLRYE, 5, Set.of(), Set.of(), Set.of(),
+                Set.of("smallrye/smallrye-graphql"));
+        assertEquals(Set.of("smallrye/smallrye-graphql#2820", "quarkusio/quarkus#50125"), Set.copyOf(lane(b, BoardClassifier.REVIEW)));
+
+        // Not installed: on the board like any other PR.
+        b = BoardClassifier.classify(f, QUARKUS_AND_SMALLRYE, 5, Set.of(), Set.of(), Set.of(), Set.of());
+        assertEquals(4, lane(b, BoardClassifier.REVIEW).size());
+    }
+
+    @Test
+    void theDependabotElfsReposComeFromItsConfigOnlyWhenItsThere(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)
+            throws Exception {
+        java.nio.file.Path config = dir.resolve("config");
+        assertEquals(Set.of(), DependabotElf.repos(config));
+        java.nio.file.Files.writeString(config, "GITHUB_USER=me\n");
+        assertEquals(Set.of(), DependabotElf.repos(config));
+        java.nio.file.Files.writeString(config, "REPOS=SmallRye/smallrye-graphql, smallrye/smallrye-open-api\n");
+        assertEquals(Set.of("smallrye/smallrye-graphql", "smallrye/smallrye-open-api"), DependabotElf.repos(config));
+    }
 }

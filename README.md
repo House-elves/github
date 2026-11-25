@@ -62,7 +62,8 @@ An item in Your move can go to **Later** (the zz under its icon): it waits there
 do something with it (start the agent, post, merge, ...) or click its zz again. It's kept in
 `state/later.json`; nothing changes on GitHub. Like Waiting on others, Later stays folded until you open it.
 
-Dependabot's org.mvnpm bumps aren't on the board: the mvnpm tab (the mvnpm-dependabot elf) handles them.
+Dependabot's org.mvnpm bumps aren't on the board: the mvnpm tab (the mvnpm-dependabot elf) handles them. With the
+Dependabot elf installed, neither are the Dependabot PRs in the repos it handles: its tab and merge queue have them.
 
 It writes its files in `~/.config/github/` (each written whole, then moved into place):
 

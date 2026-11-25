@@ -213,7 +213,7 @@ public class BoardService {
     private Board classify(BoardClassifier.Fetched fetched, boolean refreshing) {
         String login = fetched.login();
         return BoardClassifier.classify(fetched, scopes.scope(), settings.refreshMinutes(), ignores.keys(),
-                maintained(), MvnpmElf.repos()).refreshing(refreshing).returned(ignores.recentlyReturned())
+                maintained(), MvnpmElf.repos(), DependabotElf.repos()).refreshing(refreshing).returned(ignores.recentlyReturned())
                 .sinceReview(sinceReview.getOrDefault(login, Map.of()))
                 .reviewedAt(reviewedAt.getOrDefault(login, Map.of()))
                 .feedback(feedback.getOrDefault(login, Map.of()))
